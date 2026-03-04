@@ -34,10 +34,12 @@ class OptionsStreamRedisWriter(config: AppConfig):
       // Append to trades list
       pipe.lpush(s"$TradesKey:${event.symbol}", json)
       pipe.ltrim(s"$TradesKey:${event.symbol}", 0, config.historyMaxSize - 1)
+      pipe.expire(s"$TradesKey:${event.symbol}", 3600) // 1 hour
 
       // Update latest snapshot
       pipe.hset(s"$LatestKey:${event.symbol}", "last_trade", json)
       pipe.hset(s"$LatestKey:${event.symbol}", "last_trade_at", event.timestamp)
+      pipe.expire(s"$LatestKey:${event.symbol}", 86400) // 24 hours
 
       // Update meta
       pipe.hset(MetaKey, "last_event_at", java.time.Instant.now.toString)
@@ -64,14 +66,17 @@ class OptionsStreamRedisWriter(config: AppConfig):
       pipe.hset(quoteKey, "timestamp", event.timestamp)
       pipe.hset(quoteKey, "mid", ((event.bidPrice + event.askPrice) / 2.0).toString)
       pipe.hset(quoteKey, "spread", (event.askPrice - event.bidPrice).toString)
+      pipe.expire(quoteKey, 3600) // 1 hour
 
       // Append to quote history
       pipe.lpush(s"$QuotesHistKey:${event.symbol}", json)
       pipe.ltrim(s"$QuotesHistKey:${event.symbol}", 0, config.historyMaxSize - 1)
+      pipe.expire(s"$QuotesHistKey:${event.symbol}", 3600) // 1 hour
 
       // Update latest snapshot
       pipe.hset(s"$LatestKey:${event.symbol}", "last_quote", json)
       pipe.hset(s"$LatestKey:${event.symbol}", "last_quote_at", event.timestamp)
+      pipe.expire(s"$LatestKey:${event.symbol}", 86400) // 24 hours
 
       // Update meta
       pipe.hset(MetaKey, "last_event_at", java.time.Instant.now.toString)

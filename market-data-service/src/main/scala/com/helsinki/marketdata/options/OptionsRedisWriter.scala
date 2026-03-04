@@ -42,6 +42,7 @@ class OptionsRedisWriter(config: AppConfig):
         "contracts"    -> Json.fromValues(snapshots.map(s => Json.fromString(s.symbol)))
       )
       pipe.hset(chainKey, "_meta", meta.noSpaces)
+      pipe.expire(chainKey, 86400) // 24 hours
 
       // Also track which underlyings have chains in the top-level hash
       pipe.hset(ChainHashKey, underlying, meta.noSpaces)
@@ -55,6 +56,7 @@ class OptionsRedisWriter(config: AppConfig):
       )
       pipe.lpush(s"$HistoryKey:$underlying", historyEntry.noSpaces)
       pipe.ltrim(s"$HistoryKey:$underlying", 0, config.historyMaxSize - 1)
+      pipe.expire(s"$HistoryKey:$underlying", 86400) // 24 hours
 
       pipe.sync()
     finally
@@ -82,6 +84,7 @@ class OptionsRedisWriter(config: AppConfig):
       )
       pipe.hset(barsKey, "_meta", meta.noSpaces)
       pipe.hset(BarsHashKey, underlying, meta.noSpaces)
+      pipe.expire(barsKey, 86400) // 24 hours
 
       pipe.sync()
     finally
