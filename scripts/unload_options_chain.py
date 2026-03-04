@@ -6,7 +6,7 @@ Reads OptionsRecord entries from Redis and uploads them to Netlify Blobs.
 Uses the unified OptionsRecord schema (proto/options_contract.proto).
 
 Supports two Redis sources:
-  - redis-13258 (OPTIONS_REDIS_HOST) — dedicated options stream data
+  - redis-14697 (OPTIONS_REDIS_HOST) — dedicated options stream data
   - redis-17054 (REDIS_HOST) — legacy polling data
 
 Redis keys consumed (OptionsRecord format):
@@ -20,7 +20,7 @@ Legacy keys also consumed (backward compat):
   options-bars:{SYMBOL}           (latest read)
 
 Env vars required:
-  OPTIONS_REDIS_HOST (default: redis-13258.c99.us-east-1-4.ec2.cloud.redislabs.com:13258)
+  OPTIONS_REDIS_HOST (default: redis-14697.c52.us-east-1-4.ec2.cloud.redislabs.com:14697)
   OPTIONS_REDIS_PASSWORD (or REDIS_PASSWORD)
   REDIS_HOST (default: redis-17054.c99.us-east-1-4.ec2.cloud.redislabs.com:17054)
   REDIS_PASSWORD
@@ -60,10 +60,10 @@ def _make_redis(host_env, default_host, pass_env="REDIS_PASSWORD"):
 
 
 def get_options_redis():
-    """Connect to the dedicated options Redis (redis-13258)."""
+    """Connect to the dedicated options Redis (redis-14697)."""
     return _make_redis(
         "OPTIONS_REDIS_HOST",
-        "redis-13258.c99.us-east-1-4.ec2.cloud.redislabs.com:13258",
+        "redis-14697.c52.us-east-1-4.ec2.cloud.redislabs.com:14697",
         "OPTIONS_REDIS_PASSWORD",
     )
 
@@ -123,7 +123,7 @@ def _record_to_dict(rec: OptionsRecord) -> dict:
     return d
 
 
-# ── New-format unloader (OptionsRecord from redis-13258) ──
+# ── New-format unloader (OptionsRecord from redis-14697) ──
 
 
 def unload_options_records(accessor: RedisOptionsAccessor, token, site_id, underlying):
@@ -242,12 +242,12 @@ def main():
     symbols = [s.strip() for s in symbols if s.strip()]
     print(f"[unloader] Symbols: {symbols}")
 
-    # 1. Unload OptionsRecord format from redis-13258
+    # 1. Unload OptionsRecord format from redis-14697
     try:
         options_client = get_options_redis()
         options_client.ping()
         accessor = RedisOptionsAccessor(options_client)
-        print(f"[unloader] Connected to options Redis (redis-13258)")
+        print(f"[unloader] Connected to options Redis (redis-14697)")
         for symbol in symbols:
             try:
                 unload_options_records(accessor, token, site_id, symbol)

@@ -38,12 +38,12 @@ object AppConfig:
 
     val streamRedisRaw = sys.env.getOrElse(
       "OPTIONS_STREAM_REDIS_HOST",
-      "redis-13258.c99.us-east-1-4.ec2.cloud.redislabs.com:13258"
+      "redis-14697.c52.us-east-1-4.ec2.cloud.redislabs.com:14697"
     )
     val (streamHost, streamPort) = streamRedisRaw.split(":") match
-      case Array(h, p) => (h, p.toIntOption.getOrElse(13258))
-      case Array(h)    => (h, 13258)
-      case _           => (streamRedisRaw, 13258)
+      case Array(h, p) => (h, p.toIntOption.getOrElse(14697))
+      case Array(h)    => (h, 14697)
+      case _           => (streamRedisRaw, 14697)
 
     AppConfig(
       alpacaApiKey = sys.env.getOrElse("ALPACA_API_KEY", ""),
