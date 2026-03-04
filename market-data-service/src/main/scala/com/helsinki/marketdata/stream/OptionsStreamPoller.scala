@@ -14,19 +14,23 @@ class OptionsStreamPoller(config: AppConfig):
   private var streamClient: OptionsStreamClient = null
 
   def start(): Unit =
-    val symbol = buildOccSymbol(
-      config.optionsStreamTicker,
-      config.optionsStreamExpiration,
-      config.optionsStreamType,
-      config.optionsStreamStrike
-    )
+    // Build all OCC symbols from strikes × types
+    val types = if config.optionsStreamTypes.isEmpty then Seq("P") else config.optionsStreamTypes
+    val symbols = for
+      strike <- config.optionsStreamStrikes
+      optType <- types
+    yield buildOccSymbol(config.optionsStreamTicker, config.optionsStreamExpiration, optType, strike)
+
+    if symbols.isEmpty then
+      println("[options-stream] No strikes configured, stream disabled")
+      return
 
     println(s"[options-stream] Starting options stream")
     println(s"  ticker:     ${config.optionsStreamTicker}")
     println(s"  expiration: ${config.optionsStreamExpiration}")
-    println(s"  strike:     ${config.optionsStreamStrike}")
-    println(s"  type:       ${config.optionsStreamType}")
-    println(s"  OCC symbol: $symbol")
+    println(s"  strikes:    ${config.optionsStreamStrikes.mkString(", ")}")
+    println(s"  types:      ${types.mkString(", ")}")
+    println(s"  contracts:  ${symbols.mkString(", ")}")
     println(s"  feed:       ${config.optionsStreamFeed}")
     println(s"  redis:      ${config.optionsStreamRedisHost}:${config.optionsStreamRedisPort}")
 
@@ -40,19 +44,20 @@ class OptionsStreamPoller(config: AppConfig):
       case e: Exception =>
         println(s"[options-stream] WARNING: Redis ping error: ${e.getMessage}")
 
-    redis.writeMeta(symbol, config.optionsStreamFeed)
+    symbols.foreach(s => redis.writeMeta(s, config.optionsStreamFeed))
 
     // Start supplementary greeks polling on a separate thread
-    val greeksThread = new Thread(() => pollGreeks(symbol), "options-stream-greeks")
+    val greeksThread = new Thread(() => pollGreeks(symbols), "options-stream-greeks")
     greeksThread.setDaemon(true)
     greeksThread.start()
 
-    // Start WebSocket stream (blocks on reconnect loop)
+    // Start WebSocket stream for all symbols (blocks on reconnect loop)
     streamClient = OptionsStreamClient(
       config = config,
-      contractSymbol = symbol,
+      contractSymbol = symbols.head,
       onTrade = handleTrade,
-      onQuote = handleQuote
+      onQuote = handleQuote,
+      additionalSymbols = symbols.tail
     )
     streamClient.connect() // Blocks until stop() is called
 
@@ -71,14 +76,14 @@ class OptionsStreamPoller(config: AppConfig):
         println(s"[options-stream] Redis quote write error: ${e.getMessage}")
 
   /** Poll for greeks/IV via the snapshot REST API every 30s. */
-  private def pollGreeks(symbol: String): Unit =
+  private def pollGreeks(symbols: Seq[String]): Unit =
     import OptionsEncoders.given
-    println(s"[options-stream] Starting greeks poller for $symbol")
+    println(s"[options-stream] Starting greeks poller for ${symbols.mkString(", ")}")
 
     while running do
       try
-        val snapshots = snapshotClient.fetchOptionSnapshots(Seq(symbol))
-        snapshots.headOption.foreach { snap =>
+        val snapshots = snapshotClient.fetchOptionSnapshots(symbols)
+        snapshots.foreach { snap =>
           val greeksJson = Json.obj(
             "symbol" -> Json.fromString(snap.symbol),
             "greeks" -> snap.greeks.fold(Json.Null)(_.asJson),
@@ -96,7 +101,7 @@ class OptionsStreamPoller(config: AppConfig):
               "timestamp" -> Json.fromString(q.timestamp)
             ))
           ).noSpaces
-          redis.writeGreeks(symbol, greeksJson)
+          redis.writeGreeks(snap.symbol, greeksJson)
         }
       catch
         case e: Exception =>
