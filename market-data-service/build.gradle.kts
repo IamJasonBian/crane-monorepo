@@ -23,6 +23,9 @@ dependencies {
     // Redis
     implementation("redis.clients:jedis:5.1.3")
 
+    // MessagePack (for Alpaca options WebSocket binary frames)
+    implementation("org.msgpack:msgpack-core:0.9.8")
+
     // Logging
     implementation("org.slf4j:slf4j-simple:2.0.13")
 

@@ -3,6 +3,7 @@ package com.helsinki.marketdata
 import com.helsinki.marketdata.config.AppConfig
 import com.helsinki.marketdata.poller.QuotePoller
 import com.helsinki.marketdata.options.OptionsPoller
+import com.helsinki.marketdata.stream.OptionsStreamPoller
 
 @main def run(): Unit =
   println("[market-data] Initializing Alpaca -> Redis market data service")
@@ -25,10 +26,22 @@ import com.helsinki.marketdata.options.OptionsPoller
   else
     None
 
+  // Start options WebSocket stream if configured
+  val optionsStream = if config.optionsStreamEnabled && config.optionsStreamTicker.nonEmpty then
+    val sp = OptionsStreamPoller(config)
+    val thread = new Thread(() => sp.start(), "options-stream")
+    thread.setDaemon(true)
+    thread.start()
+    println(s"[market-data] Options stream started for: ${config.optionsStreamTicker} ${config.optionsStreamExpiration} ${config.optionsStreamStrike}${config.optionsStreamType}")
+    Some(sp)
+  else
+    None
+
   Runtime.getRuntime.addShutdownHook(new Thread(() => {
     println("\n[market-data] Shutting down...")
     quotePoller.stop()
     optionsPoller.foreach(_.stop())
+    optionsStream.foreach(_.stop())
   }))
 
   quotePoller.start()
