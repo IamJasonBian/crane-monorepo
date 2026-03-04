@@ -16,8 +16,8 @@ case class AppConfig(
   optionsStreamEnabled: Boolean,
   optionsStreamTicker: String,
   optionsStreamExpiration: String,
-  optionsStreamStrike: Double,
-  optionsStreamType: String,
+  optionsStreamStrikes: Seq[Double],
+  optionsStreamTypes: Seq[String],
   optionsStreamFeed: String,
   // Dedicated Redis for options stream
   optionsStreamRedisHost: String,
@@ -38,12 +38,12 @@ object AppConfig:
 
     val streamRedisRaw = sys.env.getOrElse(
       "OPTIONS_STREAM_REDIS_HOST",
-      "redis-13258.c99.us-east-1-4.ec2.cloud.redislabs.com:13258"
+      "redis-14697.c52.us-east-1-4.ec2.cloud.redislabs.com:14697"
     )
     val (streamHost, streamPort) = streamRedisRaw.split(":") match
-      case Array(h, p) => (h, p.toIntOption.getOrElse(13258))
-      case Array(h)    => (h, 13258)
-      case _           => (streamRedisRaw, 13258)
+      case Array(h, p) => (h, p.toIntOption.getOrElse(14697))
+      case Array(h)    => (h, 14697)
+      case _           => (streamRedisRaw, 14697)
 
     AppConfig(
       alpacaApiKey = sys.env.getOrElse("ALPACA_API_KEY", ""),
@@ -60,8 +60,8 @@ object AppConfig:
       optionsStreamEnabled = sys.env.getOrElse("OPTIONS_STREAM_ENABLED", "false").toBoolean,
       optionsStreamTicker = sys.env.getOrElse("OPTIONS_STREAM_TICKER", ""),
       optionsStreamExpiration = sys.env.getOrElse("OPTIONS_STREAM_EXPIRATION", ""),
-      optionsStreamStrike = sys.env.getOrElse("OPTIONS_STREAM_STRIKE", "0").toDouble,
-      optionsStreamType = sys.env.getOrElse("OPTIONS_STREAM_TYPE", "C"),
+      optionsStreamStrikes = sys.env.getOrElse("OPTIONS_STREAM_STRIKES", "").split(",").map(_.trim).filter(_.nonEmpty).map(_.toDouble).toSeq,
+      optionsStreamTypes = sys.env.getOrElse("OPTIONS_STREAM_TYPES", "P").split(",").map(_.trim).filter(_.nonEmpty).toSeq,
       optionsStreamFeed = sys.env.getOrElse("OPTIONS_STREAM_FEED", "indicative"),
       optionsStreamRedisHost = streamHost,
       optionsStreamRedisPort = streamPort,

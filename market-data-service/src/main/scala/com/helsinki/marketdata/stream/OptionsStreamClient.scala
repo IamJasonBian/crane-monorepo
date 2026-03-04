@@ -13,7 +13,8 @@ class OptionsStreamClient(
   config: AppConfig,
   contractSymbol: String,
   onTrade: OptionTradeEvent => Unit,
-  onQuote: OptionQuoteEvent => Unit
+  onQuote: OptionQuoteEvent => Unit,
+  additionalSymbols: Seq[String] = Seq.empty
 ):
   private val wsUrl = s"wss://stream.data.alpaca.markets/v1beta1/${config.optionsStreamFeed}"
   @volatile private var ws: WebSocket = null
@@ -26,7 +27,8 @@ class OptionsStreamClient(
 
   def connect(): Unit =
     println(s"[options-stream] Connecting to $wsUrl")
-    println(s"[options-stream] Contract: $contractSymbol")
+    val allSymbols = contractSymbol +: additionalSymbols
+    println(s"[options-stream] Contracts: ${allSymbols.mkString(", ")}")
 
     val httpClient = HttpClient.newHttpClient()
     var backoff = 1000L
@@ -225,7 +227,9 @@ class OptionsStreamClient(
     sendText(json)
 
   private def sendSubscribe(): Unit =
-    val json = s"""{"action":"subscribe","trades":["$contractSymbol"],"quotes":["$contractSymbol"]}"""
+    val allSymbols = contractSymbol +: additionalSymbols
+    val symbolList = allSymbols.map(s => s""""$s"""").mkString(",")
+    val json = s"""{"action":"subscribe","trades":[$symbolList],"quotes":[$symbolList]}"""
     sendText(json)
 
   private def sendText(text: String): Unit =

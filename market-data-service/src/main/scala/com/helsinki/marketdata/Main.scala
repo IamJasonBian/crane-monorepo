@@ -32,7 +32,7 @@ import com.helsinki.marketdata.stream.OptionsStreamPoller
     val thread = new Thread(() => sp.start(), "options-stream")
     thread.setDaemon(true)
     thread.start()
-    println(s"[market-data] Options stream started for: ${config.optionsStreamTicker} ${config.optionsStreamExpiration} ${config.optionsStreamStrike}${config.optionsStreamType}")
+    println(s"[market-data] Options stream started for: ${config.optionsStreamTicker} ${config.optionsStreamExpiration} strikes=${config.optionsStreamStrikes.mkString(",")} types=${config.optionsStreamTypes.mkString(",")}")
     Some(sp)
   else
     None
