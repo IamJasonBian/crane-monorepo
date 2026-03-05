@@ -4,9 +4,12 @@
 
 @layer base {
   * {
-    @apply border-gray-200;
+    @apply border-[#1a1a1a];
   }
   body {
-    @apply bg-gray-50 text-gray-900;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: #000;
+    color: #ccc;
+    -webkit-font-smoothing: antialiased;
   }
 }

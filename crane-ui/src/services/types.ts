@@ -97,6 +97,8 @@ export interface FeedHealth {
   quote_symbols: string[];
 }
 
+// ── eBay Listings ──────────────────────────────────────────────────────
+
 export interface SellerInfo {
   name: string;
   review_count: string;

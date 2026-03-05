@@ -95,11 +95,13 @@ export async function getFeedHealth(): Promise<FeedHealth> {
 // ── eBay Listings ──────────────────────────────────────────────────────
 
 export async function getListings(limit?: number): Promise<EbayListing[]> {
-  return get<EbayListing[]>(`/listings/${limit ? `?limit=${limit}` : ''}`);
+  const q = limit ? `?limit=${limit}` : '';
+  return get<EbayListing[]>(`/listings/${q}`);
 }
 
 export async function getListingsByTerm(query: string, limit?: number): Promise<EbayListing[]> {
-  return get<EbayListing[]>(`/listings/by-term/${encodeURIComponent(query)}${limit ? `?limit=${limit}` : ''}`);
+  const q = limit ? `?limit=${limit}` : '';
+  return get<EbayListing[]>(`/listings/by-term/${encodeURIComponent(query)}${q}`);
 }
 
 export async function getListing(epid: string): Promise<EbayListing> {
