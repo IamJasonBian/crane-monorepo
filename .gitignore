@@ -21,5 +21,8 @@ venv/
 .env
 .env.local
 
+# Node
+node_modules/
+
 # Context (conductor)
 .context/
