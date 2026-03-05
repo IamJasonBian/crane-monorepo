@@ -59,6 +59,16 @@ def feed_health():
     rc = get_redis()
     quote_symbols = rc.get_index("crane:feed:quotes:index")
     option_symbols = rc.get_index("crane:feed:options:index:all")
+
+    # Also check legacy format
+    if not quote_symbols:
+        raw = rc.client.hgetall("market-quotes")
+        quote_symbols = {k.decode() for k in raw.keys() if k.decode() != "_meta"}
+    if not option_symbols:
+        for underlying in ["IWN", "CRWD"]:
+            raw = rc.client.hgetall(f"options-chain:{underlying}")
+            option_symbols |= {k.decode() for k in raw.keys() if k.decode() != "_meta"}
+
     return {
         "tracked_quotes": len(quote_symbols),
         "tracked_options": len(option_symbols),

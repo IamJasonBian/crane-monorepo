@@ -28,17 +28,30 @@ MANAGER_PREFIX = "crane:manager"
 class RedisClient:
     """Thin wrapper around redis-py with Crane-specific helpers."""
 
-    def __init__(self, host: str, port: int = 6379, password: Optional[str] = None, db: int = 0):
-        self._pool = redis.ConnectionPool(host=host, port=port, password=password, db=db)
+    def __init__(self, host: str, port: int = 6379, password: Optional[str] = None,
+                 username: Optional[str] = None, db: int = 0):
+        self._pool = redis.ConnectionPool(
+            host=host, port=port, password=password, username=username, db=db,
+        )
         self._client = redis.Redis(connection_pool=self._pool)
 
     @classmethod
     def from_env(cls, host_var: str = "REDIS_HOST", password_var: str = "REDIS_PASSWORD",
                  port_var: str = "REDIS_PORT") -> RedisClient:
-        host = os.environ.get(host_var, "localhost")
+        host_raw = os.environ.get(host_var, "localhost")
         password = os.environ.get(password_var)
         port = int(os.environ.get(port_var, "6379"))
-        return cls(host=host, port=port, password=password)
+        # Support host:port format (e.g. redis-13258.c99.example.com:13258)
+        if ":" in host_raw:
+            host, port_str = host_raw.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                host = host_raw
+        else:
+            host = host_raw
+        username = os.environ.get("REDIS_USERNAME", "default")
+        return cls(host=host, port=port, password=password, username=username)
 
     @property
     def client(self) -> redis.Redis:

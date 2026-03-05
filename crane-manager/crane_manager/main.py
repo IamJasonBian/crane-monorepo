@@ -9,9 +9,9 @@ from __future__ import annotations
 import logging
 
 import uvicorn
-from fastapi import FastAPI
-
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from crane_manager.api.strategies import router as strategies_router
 from crane_manager.api.targets import router as targets_router
@@ -24,6 +24,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 log = logging.getLogger("crane-manager")
 
 app = FastAPI(title="Crane Manager", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Return JSON instead of 500 HTML when Redis is down or other errors."""
+    log.error(f"{request.method} {request.url.path} failed: {exc}")
+    return JSONResponse(status_code=503, content={"error": str(exc), "detail": "Service temporarily unavailable"})
+
 
 app.include_router(strategies_router, prefix="/api/strategies", tags=["strategies"])
 app.include_router(targets_router, prefix="/api/targets", tags=["targets"])
