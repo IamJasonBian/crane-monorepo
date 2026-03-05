@@ -25,12 +25,8 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      ALPACA_KEY_ID: ${ALPACA_KEY_ID}
-      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
-      SYMBOLS: ${SYMBOLS:-AAPL,MSFT,GOOGL}
-      CRYPTO_SYMBOLS: ${CRYPTO_SYMBOLS:-BTC/USD,ETH/USD}
-      OPTIONS_SYMBOLS: ${OPTIONS_SYMBOLS:-}
-      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3000}
+      COUNTDOWN_API_KEY: ${COUNTDOWN_API_KEY}
+      RUN_ONCE: ${RUN_ONCE:-}
     restart: unless-stopped
 
   crane-engine:
@@ -62,6 +58,26 @@ services:
       REDIS_PORT: "6379"
     restart: unless-stopped
 
+  crane-render:
+    build:
+      context: .
+      dockerfile: crane-render/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+      crane-feed:
+        condition: service_started
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      RENDER_FLUSH_INTERVAL_S: "300"
+      RENDER_OUTPUT_DIR: /data/crane-render
+      RENDER_AUTO_COMPACT: "true"
+      RENDER_COMPACT_HOUR_UTC: "5"
+    volumes:
+      - render-data:/data/crane-render
+    restart: unless-stopped
+
   # ─── Legacy Scala service (optional) ─────────────────────────────────
   market-data-service:
     build:
@@ -81,3 +97,4 @@ services:
 
 volumes:
   redis-data:
+  render-data:

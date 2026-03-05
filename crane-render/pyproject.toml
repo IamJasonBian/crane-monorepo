@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crane-render"
+version = "0.1.0"
+description = "Redis Stream → Parquet snapshot service for the Crane platform"
+requires-python = ">=3.11"
+dependencies = [
+    "crane-shared",
+    "pyarrow>=15.0",
+    "redis>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+crane-render = "crane_render.main:main"
+crane-compact = "crane_render.cli:compact"
