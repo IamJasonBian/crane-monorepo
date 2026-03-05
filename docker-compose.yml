@@ -1,0 +1,83 @@
+version: "3.8"
+
+services:
+  # ─── Infrastructure ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Crane Services ──────────────────────────────────────────────────
+  crane-feed:
+    build:
+      context: .
+      dockerfile: crane-feed/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ALPACA_KEY_ID: ${ALPACA_KEY_ID}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
+      SYMBOLS: ${SYMBOLS:-AAPL,MSFT,GOOGL}
+      CRYPTO_SYMBOLS: ${CRYPTO_SYMBOLS:-BTC/USD,ETH/USD}
+      OPTIONS_SYMBOLS: ${OPTIONS_SYMBOLS:-}
+      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3000}
+    restart: unless-stopped
+
+  crane-engine:
+    build:
+      context: .
+      dockerfile: crane-engine/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+      crane-feed:
+        condition: service_started
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ENGINE_CONSUMER_GROUP: crane-engine
+    restart: unless-stopped
+
+  crane-manager:
+    build:
+      context: .
+      dockerfile: crane-manager/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    restart: unless-stopped
+
+  # ─── Legacy Scala service (optional) ─────────────────────────────────
+  market-data-service:
+    build:
+      context: ./market-data-service
+      dockerfile: Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ALPACA_KEY_ID: ${ALPACA_KEY_ID}
+      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
+    profiles:
+      - legacy
+    restart: unless-stopped
+
+volumes:
+  redis-data:

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crane-engine"
+version = "0.1.0"
+description = "Allocation engine — signal processing, price gates, budget gates, order generation"
+requires-python = ">=3.11"
+dependencies = [
+    "crane-shared",
+    "redis>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+crane-engine = "crane_engine.main:main"

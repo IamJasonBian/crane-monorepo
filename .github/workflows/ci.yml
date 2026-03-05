@@ -1,0 +1,180 @@
+name: Crane CI
+
+on:
+  push:
+    branches: [main, "IamJasonBian/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ─── Stage 1: Build shared library (everything depends on this) ──────
+  build-shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install crane-shared
+        run: pip install -e crane-shared[dev]
+
+      - name: Test crane-shared
+        run: pytest crane-shared/tests/ -v
+
+      - name: Upload crane-shared artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crane-shared
+          path: crane-shared/
+
+  # ─── Stage 2: Build services in parallel (depend on shared) ──────────
+  build-feed:
+    needs: build-shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download crane-shared
+        uses: actions/download-artifact@v4
+        with:
+          name: crane-shared
+          path: crane-shared/
+
+      - name: Install dependencies
+        run: |
+          pip install crane-shared/
+          pip install -e crane-feed[dev]
+
+      - name: Test crane-feed
+        run: pytest crane-feed/tests/ -v
+
+  build-engine:
+    needs: build-shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download crane-shared
+        uses: actions/download-artifact@v4
+        with:
+          name: crane-shared
+          path: crane-shared/
+
+      - name: Install dependencies
+        run: |
+          pip install crane-shared/
+          pip install -e crane-engine[dev]
+
+      - name: Test crane-engine
+        run: pytest crane-engine/tests/ -v
+
+  build-manager:
+    needs: build-shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download crane-shared
+        uses: actions/download-artifact@v4
+        with:
+          name: crane-shared
+          path: crane-shared/
+
+      - name: Install dependencies
+        run: |
+          pip install crane-shared/
+          pip install -e crane-manager[dev]
+
+      - name: Test crane-manager
+        run: pytest crane-manager/tests/ -v
+
+  # ─── Stage 3: Integration test (all services must build) ─────────────
+  integration:
+    needs: [build-feed, build-engine, build-manager]
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install all services
+        run: |
+          pip install crane-shared/
+          pip install crane-feed/
+          pip install crane-engine/
+          pip install crane-manager/
+
+      - name: Run integration smoke test
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+        run: python -m pytest tests/test_integration.py -v --timeout=30
+
+  # ─── Stage 4: Docker builds (parallel, depend on tests) ─────────────
+  docker-feed:
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build crane-feed image
+        run: docker build -f crane-feed/Dockerfile -t crane-feed:latest .
+
+  docker-engine:
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build crane-engine image
+        run: docker build -f crane-engine/Dockerfile -t crane-engine:latest .
+
+  docker-manager:
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build crane-manager image
+        run: docker build -f crane-manager/Dockerfile -t crane-manager:latest .
+
+  # ─── Legacy: existing Scala market-data-service ──────────────────────
+  build-market-data-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build market-data-service
+        working-directory: market-data-service
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon

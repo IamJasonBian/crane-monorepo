@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crane-manager"
+version = "0.1.0"
+description = "Management API — strategy CRUD, budget tracking, health monitoring, circuit breakers"
+requires-python = ">=3.11"
+dependencies = [
+    "crane-shared",
+    "fastapi>=0.109",
+    "uvicorn>=0.27",
+    "redis>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+crane-manager = "crane_manager.main:main"

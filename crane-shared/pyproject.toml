@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crane-shared"
+version = "0.1.0"
+description = "Shared models, Redis utilities, and protobuf types for the Crane platform"
+requires-python = ">=3.11"
+dependencies = [
+    "redis>=5.0",
+    "pydantic>=2.0",
+    "protobuf>=4.25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]

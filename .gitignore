@@ -1,2 +1,25 @@
 # Local Netlify folder
 .netlify
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Environment
+.env
+.env.local
+
+# Context (conductor)
+.context/

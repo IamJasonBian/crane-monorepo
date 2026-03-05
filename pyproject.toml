@@ -1,0 +1,9 @@
+[project]
+name = "crane-monorepo"
+version = "0.1.0"
+description = "Crane allocation platform — feed, engine, and manager services"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["crane-shared/tests", "crane-feed/tests", "crane-engine/tests", "crane-manager/tests", "tests"]
+addopts = "--import-mode=importlib"
