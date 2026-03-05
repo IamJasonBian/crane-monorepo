@@ -25,12 +25,7 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      ALPACA_KEY_ID: ${ALPACA_KEY_ID}
-      ALPACA_SECRET_KEY: ${ALPACA_SECRET_KEY}
-      SYMBOLS: ${SYMBOLS:-AAPL,MSFT,GOOGL}
-      CRYPTO_SYMBOLS: ${CRYPTO_SYMBOLS:-BTC/USD,ETH/USD}
-      OPTIONS_SYMBOLS: ${OPTIONS_SYMBOLS:-}
-      POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3000}
+      COUNTDOWN_API_KEY: ${COUNTDOWN_API_KEY}
     restart: unless-stopped
 
   crane-engine:

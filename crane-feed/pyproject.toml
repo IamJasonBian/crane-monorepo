@@ -5,13 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "crane-feed"
 version = "0.1.0"
-description = "Market data ingestion service — Alpaca REST/WebSocket → Redis → event bus"
+description = "eBay listing ingestion service — Countdown API → Redis → event bus"
 requires-python = ">=3.11"
 dependencies = [
     "crane-shared",
     "httpx>=0.27",
-    "websockets>=12.0",
-    "msgpack>=1.0",
     "redis>=5.0",
 ]
 
