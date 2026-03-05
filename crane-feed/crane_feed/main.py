@@ -1,19 +1,17 @@
 """Entry point for crane-feed.
 
-Spawns data source pollers/streams and publishes to Redis + event bus.
+Runs the CountdownEbayPoller to poll eBay BIN listings via the Countdown API.
+Seeds default search terms on first run, then polls every 5 minutes.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import threading
 import time
 
 from crane_shared import RedisClient, EventBus
-from crane_feed.sources.alpaca_quotes import AlpacaQuotePoller
-from crane_feed.sources.alpaca_options import AlpacaOptionsPoller
-from crane_feed.store.redis_writer import FeedRedisWriter
+from crane_feed.sources.countdown_ebay import CountdownEbayPoller
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 log = logging.getLogger("crane-feed")
@@ -24,50 +22,20 @@ def main():
 
     redis_client = RedisClient.from_env()
     if not redis_client.ping():
-        log.warning("Redis not reachable — running in offline mode")
+        log.error("Redis not reachable")
+        return
 
     event_bus = EventBus(redis_client)
-    writer = FeedRedisWriter(redis_client, event_bus)
+    poller = CountdownEbayPoller(redis_client, event_bus)
 
-    # Config from env
-    symbols = os.environ.get("SYMBOLS", "AAPL,MSFT,GOOGL").split(",")
-    crypto_symbols = os.environ.get("CRYPTO_SYMBOLS", "BTC/USD,ETH/USD").split(",")
-    options_symbols = os.environ.get("OPTIONS_SYMBOLS", "").split(",")
-    options_symbols = [s for s in options_symbols if s]
-    poll_interval = int(os.environ.get("POLL_INTERVAL_MS", "3000")) / 1000.0
+    # Seed terms if none exist
+    if not poller._load_search_terms():
+        log.info("No search terms found, seeding defaults...")
+        from crane_feed.seed import seed_terms
+        seed_terms(redis_client)
 
-    # Quote poller
-    quote_poller = AlpacaQuotePoller(
-        symbols=symbols,
-        crypto_symbols=crypto_symbols,
-        writer=writer,
-        poll_interval=poll_interval,
-    )
-
-    threads = []
-
-    # Main thread: stock/crypto quotes
-    t_quotes = threading.Thread(target=quote_poller.run, name="quote-poller", daemon=True)
-    t_quotes.start()
-    threads.append(t_quotes)
-
-    # Options poller (if configured)
-    if options_symbols:
-        options_poller = AlpacaOptionsPoller(
-            underlyings=options_symbols,
-            writer=writer,
-        )
-        t_options = threading.Thread(target=options_poller.run, name="options-poller", daemon=True)
-        t_options.start()
-        threads.append(t_options)
-
-    log.info(f"Feed running — symbols={symbols}, crypto={crypto_symbols}, options={options_symbols}")
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        log.info("Shutting down crane-feed")
+    log.info("Starting eBay poller loop")
+    poller.run()
 
 
 if __name__ == "__main__":

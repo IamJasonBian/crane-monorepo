@@ -230,3 +230,53 @@ class BudgetState(BaseModel):
     trade_count: int = 0
     max_trades: int = 0
     frozen: bool = False
+
+
+# ---------------------------------------------------------------------------
+# eBay Listings (crane-feed → Redis → crane-engine)
+# ---------------------------------------------------------------------------
+
+
+class SellerInfo(BaseModel):
+    """eBay seller metadata."""
+
+    name: str = ""
+    review_count: str = "0"
+    positive_feedback_percent: float = 0.0
+
+
+class EbayListing(BaseModel):
+    """Parsed eBay listing from Countdown API."""
+
+    epid: str  # eBay Item Number (permanent identifier)
+    title: str = ""
+    link: str = ""
+    image: str = ""
+    condition: str = ""
+    price: float = 0.0
+    price_raw: str = ""
+    is_auction: bool = False
+    buy_it_now: bool = False
+    free_returns: bool = False
+    best_offer: bool = False
+    sponsored: bool = False
+    item_location: str = ""
+    seller: SellerInfo = Field(default_factory=SellerInfo)
+    search_term: str = ""
+    first_seen: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    last_seen: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+class SearchTerm(BaseModel):
+    """eBay search term configuration."""
+
+    term_id: str
+    query: str
+    category: str = ""
+    enabled: bool = True
+    threshold_price: float = 0.0
+    sort_by: str = "price_low_to_high"
+    listing_type: str = "buy_it_now"
+    last_polled: str = ""
+    result_count: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())

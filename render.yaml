@@ -1,0 +1,15 @@
+services:
+  - type: worker
+    name: crane-feed
+    runtime: python
+    buildCommand: "pip install ./crane-shared && pip install ./crane-feed"
+    startCommand: "python -m crane_feed.main"
+    envVars:
+      - key: REDIS_HOST
+        value: redis-13258.c99.us-east-1-4.ec2.cloud.redislabs.com:13258
+      - key: REDIS_USERNAME
+        value: redis-prod-rs
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: COUNTDOWN_API_KEY
+        sync: false

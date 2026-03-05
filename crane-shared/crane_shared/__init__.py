@@ -14,6 +14,9 @@ from crane_shared.models import (
     Strategy,
     WatchTarget,
     BudgetState,
+    EbayListing,
+    SellerInfo,
+    SearchTerm,
 )
 from crane_shared.redis_client import RedisClient
 from crane_shared.events import Event, EventBus
@@ -32,6 +35,9 @@ __all__ = [
     "Strategy",
     "WatchTarget",
     "BudgetState",
+    "EbayListing",
+    "SellerInfo",
+    "SearchTerm",
     "RedisClient",
     "Event",
     "EventBus",
