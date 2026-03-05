@@ -11,7 +11,7 @@ import type {
   SearchTerm,
 } from './types';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function get<T>(path: string): Promise<T> {
   const resp = await fetch(`${BASE}${path}`);

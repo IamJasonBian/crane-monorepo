@@ -33,6 +33,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://crane-manager-gamma.onrender.com",
+        "https://crane-ui-gamma.onrender.com",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
