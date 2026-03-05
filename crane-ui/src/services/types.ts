@@ -96,3 +96,44 @@ export interface FeedHealth {
   tracked_options: number;
   quote_symbols: string[];
 }
+
+// ── eBay Listings ──────────────────────────────────────────────────────
+
+export interface SellerInfo {
+  name: string;
+  review_count: string;
+  positive_feedback_percent: number;
+}
+
+export interface EbayListing {
+  epid: string;
+  title: string;
+  link: string;
+  image: string;
+  condition: string;
+  price: number;
+  price_raw: string;
+  is_auction: boolean;
+  buy_it_now: boolean;
+  free_returns: boolean;
+  best_offer: boolean;
+  sponsored: boolean;
+  item_location: string;
+  seller: SellerInfo;
+  search_term: string;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface SearchTerm {
+  term_id: string;
+  query: string;
+  category: string;
+  enabled: boolean;
+  threshold_price: number;
+  sort_by: string;
+  listing_type: string;
+  last_polled: string;
+  result_count: number;
+  created_at: string;
+}

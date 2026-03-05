@@ -1,0 +1,75 @@
+"""eBay listing endpoints.
+
+Reads listings written by crane-feed from Redis.
+"""
+
+from __future__ import annotations
+
+import json
+
+from fastapi import APIRouter, HTTPException
+
+from crane_shared.models import EbayListing
+from crane_manager.deps import get_redis
+
+router = APIRouter()
+
+
+@router.get("/")
+def list_all_listings(limit: int = 100):
+    """Get all listings across all search terms."""
+    rc = get_redis()
+    epids = rc.get_index("crane:feed:listings:index:all")
+    listings = []
+    for epid in sorted(epids):
+        listing = rc.get_model(f"crane:feed:listings:{epid}", EbayListing)
+        if listing:
+            listings.append(listing.model_dump())
+        if len(listings) >= limit:
+            break
+    return listings
+
+
+@router.get("/by-term/{query}")
+def list_by_term(query: str, limit: int = 100):
+    """Get listings for a specific search term."""
+    rc = get_redis()
+    epids = rc.get_index(f"crane:feed:listings:index:{query}")
+    listings = []
+    for epid in sorted(epids):
+        listing = rc.get_model(f"crane:feed:listings:{epid}", EbayListing)
+        if listing:
+            listings.append(listing.model_dump())
+        if len(listings) >= limit:
+            break
+    # Sort by price ascending
+    listings.sort(key=lambda x: x.get("price", 0))
+    return listings
+
+
+@router.get("/{epid}")
+def get_listing(epid: str):
+    rc = get_redis()
+    listing = rc.get_model(f"crane:feed:listings:{epid}", EbayListing)
+    if not listing:
+        raise HTTPException(status_code=404, detail=f"Listing {epid} not found")
+    return listing.model_dump()
+
+
+@router.get("/{epid}/history")
+def get_listing_history(epid: str, limit: int = 100):
+    """Get price history for a specific listing."""
+    rc = get_redis()
+    key = f"crane:feed:listings:history:{epid}"
+    raw = rc.client.lrange(key, 0, limit - 1)
+    points = []
+    for item in reversed(raw):
+        try:
+            data = json.loads(item)
+            points.append({
+                "timestamp": data.get("last_seen", ""),
+                "price": data.get("price", 0),
+            })
+        except Exception:
+            continue
+    return points

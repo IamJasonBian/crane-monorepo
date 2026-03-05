@@ -7,6 +7,7 @@ budgets, and system health monitoring.
 from __future__ import annotations
 
 import logging
+import os
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -19,6 +20,8 @@ from crane_manager.api.budget import router as budget_router
 from crane_manager.api.health import router as health_router
 from crane_manager.api.market import router as market_router
 from crane_manager.api.orders import router as orders_router
+from crane_manager.api.terms import router as terms_router
+from crane_manager.api.listings import router as listings_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 log = logging.getLogger("crane-manager")
@@ -27,7 +30,10 @@ app = FastAPI(title="Crane Manager", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://crane-manager-gamma.onrender.com",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -46,6 +52,8 @@ app.include_router(budget_router, prefix="/api/budget", tags=["budget"])
 app.include_router(health_router, prefix="/api/health", tags=["health"])
 app.include_router(market_router, prefix="/api/market", tags=["market"])
 app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
+app.include_router(terms_router, prefix="/api/terms", tags=["terms"])
+app.include_router(listings_router, prefix="/api/listings", tags=["listings"])
 
 
 @app.get("/")
@@ -55,7 +63,8 @@ def root():
 
 def main():
     log.info("Starting crane-manager API")
-    uvicorn.run("crane_manager.main:app", host="0.0.0.0", port=8000, reload=False)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("crane_manager.main:app", host="0.0.0.0", port=port, reload=False)
 
 
 if __name__ == "__main__":

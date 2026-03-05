@@ -7,6 +7,8 @@ import type {
   OrderIntent,
   HealthStatus,
   FeedHealth,
+  EbayListing,
+  SearchTerm,
 } from './types';
 
 const BASE = '/api';
@@ -88,4 +90,38 @@ export async function getHealth(): Promise<HealthStatus> {
 
 export async function getFeedHealth(): Promise<FeedHealth> {
   return get<FeedHealth>('/health/feed');
+}
+
+// ── eBay Listings ──────────────────────────────────────────────────────
+
+export async function getListings(limit?: number): Promise<EbayListing[]> {
+  const q = limit ? `?limit=${limit}` : '';
+  return get<EbayListing[]>(`/listings/${q}`);
+}
+
+export async function getListingsByTerm(query: string, limit?: number): Promise<EbayListing[]> {
+  const q = limit ? `?limit=${limit}` : '';
+  return get<EbayListing[]>(`/listings/by-term/${encodeURIComponent(query)}${q}`);
+}
+
+export async function getListing(epid: string): Promise<EbayListing> {
+  return get<EbayListing>(`/listings/${epid}`);
+}
+
+export async function getListingHistory(epid: string): Promise<PricePoint[]> {
+  return get<PricePoint[]>(`/listings/${epid}/history`);
+}
+
+// ── Search Terms ───────────────────────────────────────────────────────
+
+export async function getTerms(): Promise<SearchTerm[]> {
+  return get<SearchTerm[]>('/terms/');
+}
+
+export async function createTerm(term: SearchTerm): Promise<SearchTerm> {
+  return post<SearchTerm>('/terms/', term);
+}
+
+export async function deleteTerm(termId: string): Promise<void> {
+  return del(`/terms/${termId}`);
 }

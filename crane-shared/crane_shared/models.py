@@ -35,6 +35,49 @@ class MarketQuote(BaseModel):
         return self.ask - self.bid
 
 
+class SellerInfo(BaseModel):
+    name: str = ""
+    review_count: str = ""
+    positive_feedback_percent: float = 0.0
+
+
+class EbayListing(BaseModel):
+    """An eBay product listing from Countdown API search results."""
+
+    epid: str  # eBay product ID
+    title: str = ""
+    link: str = ""
+    image: str = ""
+    condition: str = ""
+    price: float = 0.0
+    price_raw: str = ""
+    is_auction: bool = False
+    buy_it_now: bool = False
+    free_returns: bool = False
+    best_offer: bool = False
+    sponsored: bool = False
+    item_location: str = ""
+    seller: SellerInfo = Field(default_factory=SellerInfo)
+    search_term: str = ""  # which query found this
+    first_seen: str = ""
+    last_seen: str = ""
+
+
+class SearchTerm(BaseModel):
+    """A tracked search term for eBay feed polling."""
+
+    term_id: str
+    query: str
+    category: str = ""
+    enabled: bool = True
+    threshold_price: float = 0.0  # alert if price below this
+    sort_by: str = "price_low_to_high"
+    listing_type: str = "buy_it_now"
+    last_polled: str = ""
+    result_count: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
 class Pricing(BaseModel):
     bid: float = 0.0
     ask: float = 0.0
