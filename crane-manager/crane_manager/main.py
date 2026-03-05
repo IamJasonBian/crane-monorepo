@@ -34,6 +34,7 @@ app.add_middleware(
         "http://localhost:5173",
         "https://crane-manager-gamma.onrender.com",
         "https://crane-ui-gamma.onrender.com",
+        "https://crane-ui-gamma.netlify.app",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
