@@ -1,7 +1,7 @@
 """Slickdeals RSS feed poller.
 
-Free deal aggregator that surfaces price drops from Best Buy, Amazon,
-Newegg, B&H, and other retailers. No API key required.
+Free deal aggregator that surfaces price drops from retailers.
+Currently monitoring eBay and Best Buy only. No API key required.
 
 RSS URL:
   https://slickdeals.net/newsearch.php?searchin=deals&q={query}&rss=1
@@ -48,15 +48,20 @@ def _extract_retailer(title: str, link: str) -> str:
     """Guess retailer from deal title or link."""
     t = title.lower()
     retailers = [
-        ("amazon", "Amazon"), ("best buy", "Best Buy"), ("bestbuy", "Best Buy"),
-        ("newegg", "Newegg"), ("b&h", "B&H Photo"), ("bhphoto", "B&H Photo"),
-        ("walmart", "Walmart"), ("micro center", "Micro Center"),
-        ("adorama", "Adorama"), ("crucial.com", "Crucial"),
+        ("ebay", "eBay"), ("best buy", "Best Buy"), ("bestbuy", "Best Buy"),
+        ("amazon", "Amazon"), ("newegg", "Newegg"), ("b&h", "B&H Photo"),
+        ("bhphoto", "B&H Photo"), ("walmart", "Walmart"),
+        ("micro center", "Micro Center"), ("adorama", "Adorama"),
+        ("crucial.com", "Crucial"),
     ]
     for keyword, name in retailers:
         if keyword in t:
             return name
-    return "Slickdeals"
+    return "Other"
+
+
+# Only notify for these retailers
+MONITORED_RETAILERS = {"eBay", "Best Buy"}
 
 
 class SlickdealsPoller:
@@ -166,8 +171,11 @@ class SlickdealsPoller:
                 deal_id,
             )
 
-            # Classify and notify
-            if classify_listing(term.query, listing.title):
+            # Classify and notify (eBay and Best Buy only)
+            if (
+                deal["retailer"] in MONITORED_RETAILERS
+                and classify_listing(term.query, listing.title)
+            ):
                 is_new = existing is None
                 if is_new and listing.price > 0:
                     notify_listing(
