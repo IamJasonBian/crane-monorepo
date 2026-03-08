@@ -46,9 +46,10 @@ STORE_NAME = "options-chain"
 BATCH_SIZE = 500
 
 
-def _make_redis(host_env, default_host, pass_env="REDIS_PASSWORD"):
+def _make_redis(host_env, default_host, pass_env="REDIS_PASSWORD", user_env="REDIS_USERNAME"):
     host = os.getenv(host_env, default_host)
     password = os.getenv(pass_env, os.getenv("REDIS_PASSWORD"))
+    username = os.getenv(user_env, os.getenv("REDIS_USERNAME", "default"))
     port = int(default_host.rsplit(":", 1)[-1])
     if ":" in host:
         host, port_str = host.rsplit(":", 1)
@@ -56,7 +57,7 @@ def _make_redis(host_env, default_host, pass_env="REDIS_PASSWORD"):
             port = int(port_str)
         except ValueError:
             pass
-    return redis.Redis(host=host, port=port, password=password, decode_responses=True)
+    return redis.Redis(host=host, port=port, password=password, username=username, decode_responses=True)
 
 
 def get_options_redis():
