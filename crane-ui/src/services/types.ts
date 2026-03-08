@@ -133,6 +133,7 @@ export interface SearchTerm {
   category: string;
   enabled: boolean;
   threshold_price: number;
+  min_price: number;
   sort_by: string;
   listing_type: string;
   last_polled: string;
