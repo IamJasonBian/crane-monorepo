@@ -46,43 +46,48 @@ def main():
     log.info("Slickdeals poller started in background thread")
 
     # Start Best Buy product monitor in background (5 min intervals)
-    bb_monitor = BestBuyMonitor(redis_client, poll_interval=300)
-    # Seed tracked products if not already present
-    bb_products = bb_monitor.list_products()
-    tracked_ids = {p.get("product_id") for p in bb_products}
-    if "JCQ6HQXJVH" not in tracked_ids:
-        bb_monitor.add_product(
-            url="https://www.bestbuy.com/product/samsung-geek-squad-certified-refurbished-980-pro-2tb-internal-ssd-pcie-gen-4-x4-nvme/JCQ6HQXJVH",
-            name="Samsung 980 Pro 2TB (GS Certified Refurbished)",
-            target_price=80.0,
-        )
-    if "JCQ6HRHVGC" not in tracked_ids:
-        bb_monitor.add_product(
-            url="https://www.bestbuy.com/product/samsung-geek-squad-certified-refurbished-980-pro-1tb-internal-ssd-pcie-gen-4-x4-nvme/JCQ6HRHVGC",
-            name="Samsung 980 Pro 1TB (GS Certified Refurbished)",
-            target_price=60.0,
-        )
-    def _bb_thread_wrapper():
-        import traceback as _tb
-        try:
-            # Write to Redis so we can confirm this thread started
-            redis_client.client.set("crane:feed:bestbuy:thread_status",
-                                     "started", ex=600)
-            bb_monitor.run()
-        except Exception as e:
-            err = _tb.format_exc()
-            log.error(f"Best Buy monitor thread crashed: {err}")
-            redis_client.client.set("crane:feed:bestbuy:thread_status",
-                                     f"crashed: {err[:500]}", ex=600)
-            try:
-                from crane_feed.sources.bestbuy_monitor import _slack_log
-                _slack_log(f"THREAD CRASHED: {err[:300]}")
-            except Exception:
-                pass
+    try:
+        bb_monitor = BestBuyMonitor(redis_client, poll_interval=300)
+        bb_products = bb_monitor.list_products()
+        tracked_ids = {p.get("product_id") for p in bb_products}
+        if "JCQ6HQXJVH" not in tracked_ids:
+            bb_monitor.add_product(
+                url="https://www.bestbuy.com/product/samsung-geek-squad-certified-refurbished-980-pro-2tb-internal-ssd-pcie-gen-4-x4-nvme/JCQ6HQXJVH",
+                name="Samsung 980 Pro 2TB (GS Certified Refurbished)",
+                target_price=80.0,
+            )
+        if "JCQ6HRHVGC" not in tracked_ids:
+            bb_monitor.add_product(
+                url="https://www.bestbuy.com/product/samsung-geek-squad-certified-refurbished-980-pro-1tb-internal-ssd-pcie-gen-4-x4-nvme/JCQ6HRHVGC",
+                name="Samsung 980 Pro 1TB (GS Certified Refurbished)",
+                target_price=60.0,
+            )
+        redis_client.client.set("crane:feed:bestbuy:thread_status", "seeded", ex=3600)
 
-    bb_thread = threading.Thread(target=_bb_thread_wrapper, daemon=True, name="bestbuy-monitor")
-    bb_thread.start()
-    log.info("Best Buy monitor started in background thread")
+        def _bb_thread_wrapper():
+            import traceback as _tb
+            try:
+                redis_client.client.set("crane:feed:bestbuy:thread_status",
+                                         "running", ex=3600)
+                bb_monitor.run()
+            except Exception as e:
+                err = _tb.format_exc()
+                log.error(f"Best Buy monitor thread crashed: {err}")
+                redis_client.client.set("crane:feed:bestbuy:thread_status",
+                                         f"crashed: {err[:500]}", ex=3600)
+                try:
+                    from crane_feed.sources.bestbuy_monitor import _slack_log
+                    _slack_log(f"THREAD CRASHED: {err[:300]}")
+                except Exception:
+                    pass
+
+        bb_thread = threading.Thread(target=_bb_thread_wrapper, daemon=True, name="bestbuy-monitor")
+        bb_thread.start()
+        log.info("Best Buy monitor started in background thread")
+    except Exception as e:
+        log.error(f"Failed to start Best Buy monitor: {e}", exc_info=True)
+        redis_client.client.set("crane:feed:bestbuy:thread_status",
+                                 f"init_failed: {e}", ex=3600)
 
     # Run Countdown poller in main thread
     log.info("Starting Countdown API poller loop")
