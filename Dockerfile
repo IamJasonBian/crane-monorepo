@@ -14,5 +14,8 @@ RUN python -m playwright install --with-deps firefox && \
     apt-get update && apt-get install -y --no-install-recommends xvfb xauth && \
     rm -rf /var/lib/apt/lists/*
 
+# Ensure Playwright can find browsers regardless of user
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+
 # Use xvfb-run to provide a virtual display for headed Firefox
 CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1920x1080x24", "crane-feed"]
