@@ -123,6 +123,8 @@ export interface EbayListing {
   search_term: string;
   first_seen: string;
   last_seen: string;
+  sold: boolean;
+  sold_at: string;
 }
 
 export interface SearchTerm {

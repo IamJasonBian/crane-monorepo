@@ -308,6 +308,8 @@ class EbayListing(BaseModel):
     search_term: str = ""
     first_seen: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     last_seen: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    sold: bool = False
+    sold_at: str = ""
 
 
 class SearchTerm(BaseModel):
