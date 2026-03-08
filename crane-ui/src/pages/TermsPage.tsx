@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Save } from 'lucide-react';
 import { getTerms, createTerm, deleteTerm, updateTerm } from '../services/api';
 import { timeAgo } from '../utils/formatters';
 import type { SearchTerm } from '../services/types';
@@ -7,14 +7,17 @@ import type { SearchTerm } from '../services/types';
 export default function TermsPage() {
   const [terms, setTerms] = useState<SearchTerm[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ query: '', category: '', threshold: '', min: '' });
+  const [form, setForm] = useState({ query: '', category: '', min: '', max: '' });
   const [loading, setLoading] = useState(true);
+  // Track pending edits per term: { [term_id]: { min_price?: number, max_price?: number } }
+  const [edits, setEdits] = useState<Record<string, Partial<SearchTerm>>>({});
 
   const load = async () => {
     setLoading(true);
     try {
       const t = await getTerms();
       setTerms(t);
+      setEdits({});
     } catch {
       // API may not be up
     } finally {
@@ -33,7 +36,7 @@ export default function TermsPage() {
       category: form.category || 'custom',
       enabled: true,
       min_price: parseFloat(form.min) || 0,
-      max_price: parseFloat(form.threshold) || 0,
+      max_price: parseFloat(form.max) || 0,
       sort_by: 'price_low_to_high',
       listing_type: 'buy_it_now',
       last_polled: '',
@@ -42,7 +45,7 @@ export default function TermsPage() {
     };
     try {
       await createTerm(term);
-      setForm({ query: '', category: '', threshold: '', min: '' });
+      setForm({ query: '', category: '', min: '', max: '' });
       setShowAdd(false);
       load();
     } catch (err) {
@@ -59,10 +62,24 @@ export default function TermsPage() {
     }
   };
 
-  const handleUpdate = async (termId: string, field: string, value: string) => {
+  const setEdit = (termId: string, field: string, value: string) => {
     const num = parseFloat(value) || 0;
+    setEdits((prev) => ({
+      ...prev,
+      [termId]: { ...prev[termId], [field]: num },
+    }));
+  };
+
+  const handleSave = async (termId: string) => {
+    const pending = edits[termId];
+    if (!pending) return;
     try {
-      await updateTerm(termId, { [field]: num });
+      await updateTerm(termId, pending);
+      setEdits((prev) => {
+        const next = { ...prev };
+        delete next[termId];
+        return next;
+      });
       load();
     } catch (err) {
       console.error('Failed to update term:', err);
@@ -134,8 +151,8 @@ export default function TermsPage() {
               <label className="block text-[9px] font-medium text-[#555] uppercase tracking-wide mb-1">Max $</label>
               <input
                 type="number"
-                value={form.threshold}
-                onChange={(e) => setForm({ ...form, threshold: e.target.value })}
+                value={form.max}
+                onChange={(e) => setForm({ ...form, max: e.target.value })}
                 placeholder="5000"
                 className="w-full px-2 py-1 bg-[#0a0a0a] border border-[#333] text-[11px] text-white focus:outline-none focus:border-[#555]"
               />
@@ -174,11 +191,13 @@ export default function TermsPage() {
                     <th className="text-right text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Max $</th>
                     <th className="text-left text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Polled</th>
                     <th className="text-center text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Status</th>
-                    <th className="px-2 py-1 border-b border-[#222] w-8"></th>
+                    <th className="px-2 py-1 border-b border-[#222] w-16"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {catTerms.map((t) => (
+                  {catTerms.map((t) => {
+                    const hasPending = !!edits[t.term_id];
+                    return (
                     <tr key={t.term_id} className="hover:bg-[#0a0a0a] border-b border-[#111]">
                       <td className="px-2 py-1.5 text-white font-medium">{t.query}</td>
                       <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">{t.result_count || '\u2014'}</td>
@@ -187,8 +206,8 @@ export default function TermsPage() {
                           type="number"
                           defaultValue={t.min_price || ''}
                           placeholder="—"
-                          onBlur={(e) => handleUpdate(t.term_id, 'min_price', e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          onChange={(e) => setEdit(t.term_id, 'min_price', e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSave(t.term_id)}
                           className="w-16 px-1 py-0.5 bg-transparent border border-transparent hover:border-[#333] focus:border-[#555] text-[11px] text-[#888] text-right tabular-nums focus:outline-none focus:text-white"
                         />
                       </td>
@@ -197,8 +216,8 @@ export default function TermsPage() {
                           type="number"
                           defaultValue={t.max_price || ''}
                           placeholder="—"
-                          onBlur={(e) => handleUpdate(t.term_id, 'max_price', e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          onChange={(e) => setEdit(t.term_id, 'max_price', e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSave(t.term_id)}
                           className="w-16 px-1 py-0.5 bg-transparent border border-transparent hover:border-[#333] focus:border-[#555] text-[11px] text-[#888] text-right tabular-nums focus:outline-none focus:text-white"
                         />
                       </td>
@@ -214,7 +233,16 @@ export default function TermsPage() {
                           {t.enabled ? 'ACTIVE' : 'OFF'}
                         </span>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-1.5 flex gap-1 items-center">
+                        {hasPending && (
+                          <button
+                            onClick={() => handleSave(t.term_id)}
+                            className="text-[#4a4] hover:text-[#6c6] transition-colors"
+                            title="Save changes"
+                          >
+                            <Save className="w-3 h-3" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(t.term_id)}
                           className="text-[#333] hover:text-[#a44] transition-colors"
@@ -223,7 +251,8 @@ export default function TermsPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

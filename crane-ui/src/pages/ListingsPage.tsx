@@ -10,7 +10,7 @@ export default function ListingsPage() {
   const [listings, setListings] = useState<EbayListing[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rawSearch, setRawSearch] = useState(false);
+  const [classifierOn, setClassifierOn] = useState(true);
 
   useEffect(() => {
     getTerms()
@@ -18,14 +18,14 @@ export default function ListingsPage() {
       .catch(() => {});
   }, []);
 
-  const handleSearch = async (query: string, raw?: boolean) => {
+  const handleSearch = async (query: string, classifier?: boolean) => {
     if (!query) return;
     setActiveTerm(query);
     setLoading(true);
     setError(null);
-    const useRaw = raw !== undefined ? raw : rawSearch;
+    const isClassifierOn = classifier !== undefined ? classifier : classifierOn;
     try {
-      const data = await getListingsByTerm(query, { raw_search: useRaw });
+      const data = await getListingsByTerm(query, { raw_search: !isClassifierOn });
       setListings(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch listings');
@@ -49,7 +49,7 @@ export default function ListingsPage() {
         <p className="text-[9px] text-[#555] uppercase tracking-wide mt-0.5">Live eBay listings from Countdown API</p>
       </div>
 
-      {/* Term selector + raw toggle */}
+      {/* Term selector + classifier toggle */}
       {terms.length > 0 && (
         <div className="flex flex-wrap items-center gap-1 mb-3">
           {terms.map((t) => (
@@ -71,17 +71,17 @@ export default function ListingsPage() {
           <span className="mx-1 text-[#222]">|</span>
           <button
             onClick={() => {
-              const next = !rawSearch;
-              setRawSearch(next);
+              const next = !classifierOn;
+              setClassifierOn(next);
               if (activeTerm) handleSearch(activeTerm, next);
             }}
             className={`px-2 py-0.5 text-[10px] border transition-colors ${
-              rawSearch
-                ? 'bg-[#332a1a] text-[#fa3] border-[#554422]'
-                : 'text-[#555] border-[#333] hover:border-[#555] hover:text-[#ccc]'
+              classifierOn
+                ? 'bg-[#1a331a] text-[#4a4] border-[#224422]'
+                : 'bg-[#331a1a] text-[#f66] border-[#442222]'
             }`}
           >
-            raw search
+            classifier {classifierOn ? 'on' : 'off'}
           </button>
         </div>
       )}
