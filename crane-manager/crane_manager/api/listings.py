@@ -9,7 +9,7 @@ import json
 
 from fastapi import APIRouter, HTTPException
 
-from crane_shared.models import EbayListing
+from crane_shared.models import EbayListing, SearchTerm
 from crane_manager.deps import get_redis
 
 router = APIRouter()
@@ -34,11 +34,23 @@ def list_all_listings(limit: int = 100):
 def list_by_term(query: str, limit: int = 100):
     """Get listings for a specific search term."""
     rc = get_redis()
+
+    # Look up term's price bounds
+    term_id = query.strip().lower().replace(" ", "-")
+    term = rc.get_model(f"crane:manager:terms:{term_id}", SearchTerm)
+    min_price = term.min_price if term and term.min_price > 0 else 0
+    max_price = term.threshold_price if term and term.threshold_price > 0 else 0
+
     epids = rc.get_index(f"crane:feed:listings:index:{query}")
     listings = []
     for epid in sorted(epids):
         listing = rc.get_model(f"crane:feed:listings:{epid}", EbayListing)
         if listing:
+            price = listing.price
+            if min_price and price < min_price:
+                continue
+            if max_price and price > max_price:
+                continue
             listings.append(listing.model_dump())
         if len(listings) >= limit:
             break
