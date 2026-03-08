@@ -105,7 +105,7 @@ export default function ListingsPage() {
           </thead>
           <tbody>
             {listings.map((item) => (
-              <tr key={item.epid} className="hover:bg-[#0a0a0a] border-b border-[#111]">
+              <tr key={item.epid} className={`hover:bg-[#0a0a0a] border-b border-[#111] ${item.sold ? 'opacity-40' : ''}`}>
                 <td className="px-2 py-1.5 max-w-md">
                   <a
                     href={item.link}
@@ -129,6 +129,7 @@ export default function ListingsPage() {
                 </td>
                 <td className="px-2 py-1.5 text-center">
                   <span className="inline-flex gap-1">
+                    {item.sold && <span className="text-[9px] px-1 py-px bg-[#331a1a] text-[#f66]">SOLD</span>}
                     {item.buy_it_now && <span className="text-[9px] px-1 py-px bg-[#1a331a] text-[#4a4]">BIN</span>}
                     {item.free_returns && <span className="text-[9px] px-1 py-px bg-[#1a2233] text-[#6cf]">RET</span>}
                     {item.best_offer && <span className="text-[9px] px-1 py-px bg-[#2a1a33] text-[#c9f]">BO</span>}

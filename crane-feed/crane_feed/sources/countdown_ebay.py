@@ -118,6 +118,23 @@ class CountdownEbayPoller:
         log.info(f"'{term.query}': {len(listings)} listings found")
 
         now = datetime.utcnow().isoformat()
+        current_epids = {l.epid for l in listings if l.epid}
+
+        # Mark disappeared listings as sold
+        prev_epids = set(self._redis.get_index(
+            f"crane:feed:listings:index:{term.query}",
+        ))
+        for epid in prev_epids - current_epids:
+            existing = self._redis.get_model(
+                f"crane:feed:listings:{epid}", EbayListing,
+            )
+            if existing and not existing.sold:
+                existing.sold = True
+                existing.sold_at = now
+                self._redis.put_model(
+                    f"crane:feed:listings:{epid}", existing, ttl=30 * 86400,
+                )
+
         for listing in listings:
             if not listing.epid:
                 continue
