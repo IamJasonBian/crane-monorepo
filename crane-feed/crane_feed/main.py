@@ -1,17 +1,20 @@
 """Entry point for crane-feed.
 
-Runs the CountdownEbayPoller to poll eBay BIN listings via the Countdown API.
-Seeds default search terms on first run, then polls every 5 minutes.
+Runs multiple pollers concurrently:
+- CountdownEbayPoller: eBay listings via paid Countdown API (primary)
+- SlickdealsPoller: Free deal aggregator RSS (Best Buy, Amazon, Newegg, etc.)
+
+Seeds default search terms on first run, then polls continuously.
 """
 
 from __future__ import annotations
 
 import logging
-import os
-import time
+import threading
 
 from crane_shared import RedisClient, EventBus
 from crane_feed.sources.countdown_ebay import CountdownEbayPoller
+from crane_feed.sources.slickdeals_rss import SlickdealsPoller
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 log = logging.getLogger("crane-feed")
@@ -26,16 +29,23 @@ def main():
         return
 
     event_bus = EventBus(redis_client)
-    poller = CountdownEbayPoller(redis_client, event_bus)
+    countdown_poller = CountdownEbayPoller(redis_client, event_bus)
 
     # Seed terms if none exist
-    if not poller._load_search_terms():
+    if not countdown_poller._load_search_terms():
         log.info("No search terms found, seeding defaults...")
         from crane_feed.seed import seed_terms
         seed_terms(redis_client)
 
-    log.info("Starting eBay poller loop")
-    poller.run()
+    # Start Slickdeals poller in background (free, covers Best Buy/Amazon/Newegg)
+    sd_poller = SlickdealsPoller(redis_client, event_bus, poll_interval=900)
+    sd_thread = threading.Thread(target=sd_poller.run, daemon=True, name="slickdeals-poller")
+    sd_thread.start()
+    log.info("Slickdeals poller started in background thread")
+
+    # Run Countdown poller in main thread
+    log.info("Starting Countdown API poller loop")
+    countdown_poller.run()
 
 
 if __name__ == "__main__":
