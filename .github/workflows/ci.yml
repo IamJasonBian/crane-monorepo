@@ -126,6 +126,7 @@ jobs:
 
       - name: Install all services
         run: |
+          pip install pytest pytest-timeout
           pip install crane-shared/
           pip install crane-feed/
           pip install crane-engine/
