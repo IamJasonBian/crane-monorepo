@@ -60,18 +60,20 @@ def _scrape_product(url: str, max_retries: int = 3) -> Optional[dict]:
     for attempt in range(1, max_retries + 1):
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=False,
-                    args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-                )
+                # Firefox avoids Best Buy's Chromium-specific bot detection
+                browser = p.firefox.launch(headless=False)
                 context = browser.new_context(
                     viewport={"width": 1920, "height": 1080},
                     locale="en-US",
                 )
                 page = context.new_page()
-                page.add_init_script(
-                    'Object.defineProperty(navigator, "webdriver", { get: () => false });'
-                )
+
+                # Warm up with homepage to get cookies
+                try:
+                    page.goto("https://www.bestbuy.com", wait_until="domcontentloaded", timeout=15000)
+                    page.wait_for_timeout(2000)
+                except Exception:
+                    pass  # Homepage warmup is best-effort
 
                 resp = page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 if not resp or resp.status >= 400:
@@ -80,7 +82,7 @@ def _scrape_product(url: str, max_retries: int = 3) -> Optional[dict]:
                     time.sleep(5 * attempt)
                     continue
 
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(4000)
 
                 title = page.title()
                 body = page.inner_text("body")
@@ -88,14 +90,14 @@ def _scrape_product(url: str, max_retries: int = 3) -> Optional[dict]:
                 # Extract all dollar amounts from page
                 prices = re.findall(r"\$[\d,]+\.\d{2}", body)
 
-                # Primary price is typically the first/lowest prominent one
+                # Primary price is the first one on the page (product hero price)
                 price = None
                 if prices:
                     price = float(prices[0].replace("$", "").replace(",", ""))
 
-                # Check Add to Cart / Sold Out buttons
-                atc = page.query_selector('button:has-text("Add to Cart")')
+                # Sold Out takes priority — both buttons can appear on the page
                 sold = page.query_selector('button:has-text("Sold Out")')
+                atc = page.query_selector('button:has-text("Add to Cart")')
                 available = bool(atc) and not bool(sold)
 
                 browser.close()
