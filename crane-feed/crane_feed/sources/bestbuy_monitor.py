@@ -170,9 +170,13 @@ class BestBuyMonitor:
             from playwright.sync_api import sync_playwright
             log.info("Playwright available for browser automation")
         except ImportError:
-            log.error("Playwright not installed — Best Buy monitor disabled. "
-                       "Install with: pip install playwright && python -m playwright install chromium")
+            msg = "Playwright not installed — Best Buy monitor disabled."
+            log.error(msg)
+            _slack_log(msg)
             return
+
+        # Send startup notification
+        _slack_log(f"Best Buy monitor started. Tracking {len(self.list_products())} products. Poll: {self.poll_interval}s")
 
         while True:
             products = self.list_products()
@@ -185,7 +189,9 @@ class BestBuyMonitor:
                 try:
                     self._check_product(product)
                 except Exception as e:
-                    log.error(f"Best Buy check failed for {product.get('product_id')}: {e}")
+                    msg = f"Best Buy check failed for {product.get('product_id')}: {e}"
+                    log.error(msg)
+                    _slack_log(msg)
                 time.sleep(15)  # Pause between products to avoid rate limits
 
             time.sleep(self.poll_interval)
@@ -200,7 +206,9 @@ class BestBuyMonitor:
 
         result = _scrape_product(url)
         if result is None:
-            log.warning(f"Could not scrape {product_id} after retries")
+            msg = f"Could not scrape {product_id} after retries"
+            log.warning(msg)
+            _slack_log(msg)
             return
 
         price = result["price"]
@@ -273,6 +281,18 @@ class BestBuyMonitor:
         status = "IN STOCK" if available else "out of stock"
         price_str = f"${price:.2f}" if price else "unknown"
         log.info(f"Best Buy {product_id}: {price_str}, {status}")
+
+
+def _slack_log(message: str):
+    """Send a diagnostic message to Slack for remote debugging."""
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
+    if not webhook_url:
+        return
+    now = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+    try:
+        httpx.post(webhook_url, json={"text": f":gear: `[BB Monitor {now}]` {message}"}, timeout=10)
+    except Exception:
+        pass
 
 
 def _notify_bestbuy(listing: EbayListing, reason: str, cart_link: str, available: bool = False) -> bool:
