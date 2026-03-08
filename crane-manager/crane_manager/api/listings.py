@@ -10,6 +10,7 @@ import json
 from fastapi import APIRouter, HTTPException
 
 from crane_shared.models import EbayListing, SearchTerm
+from crane_shared.classifier import classify_listing
 from crane_manager.deps import get_redis
 
 router = APIRouter()
@@ -50,6 +51,8 @@ def list_by_term(query: str, limit: int = 100):
             if min_price and price < min_price:
                 continue
             if max_price and price > max_price:
+                continue
+            if not classify_listing(query, listing.title):
                 continue
             listings.append(listing.model_dump())
         if len(listings) >= limit:
