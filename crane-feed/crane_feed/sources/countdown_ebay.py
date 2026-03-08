@@ -130,9 +130,9 @@ class CountdownEbayPoller:
             existing = self._redis.get_model(
                 f"crane:feed:listings:{epid}", EbayListing,
             )
-            if existing and not existing.sold:
-                existing.sold = True
-                existing.sold_at = now
+            if existing and not existing.has_sales:
+                existing.has_sales = True
+                existing.first_sale_at = now
                 self._redis.put_model(
                     f"crane:feed:listings:{epid}", existing, ttl=30 * 86400,
                 )

@@ -20,28 +20,28 @@ log = logging.getLogger("crane-feed.seed")
 
 SEED_TERMS = [
     # GPUs
-    SearchTerm(term_id="nvidia-a30", query="nvidia a30 gpu", category="gpu", threshold_price=300),
-    SearchTerm(term_id="nvidia-a100", query="nvidia a100 gpu", category="gpu", threshold_price=3000),
-    SearchTerm(term_id="nvidia-h100", query="nvidia h100 gpu", category="gpu", threshold_price=15000),
-    SearchTerm(term_id="nvidia-4090", query="nvidia rtx 4090", category="gpu", threshold_price=1200),
-    SearchTerm(term_id="nvidia-3090", query="nvidia rtx 3090", category="gpu", threshold_price=600),
-    SearchTerm(term_id="amd-mi250", query="amd instinct mi250", category="gpu", threshold_price=2000),
+    SearchTerm(term_id="nvidia-a30", query="nvidia a30 gpu", category="gpu", max_price=300),
+    SearchTerm(term_id="nvidia-a100", query="nvidia a100 gpu", category="gpu", max_price=3000),
+    SearchTerm(term_id="nvidia-h100", query="nvidia h100 gpu", category="gpu", max_price=15000),
+    SearchTerm(term_id="nvidia-4090", query="nvidia rtx 4090", category="gpu", max_price=1200),
+    SearchTerm(term_id="nvidia-3090", query="nvidia rtx 3090", category="gpu", max_price=600),
+    SearchTerm(term_id="amd-mi250", query="amd instinct mi250", category="gpu", max_price=2000),
     # DRAM / Memory
-    SearchTerm(term_id="ddr5-server", query="ddr5 server memory 64gb", category="dram", threshold_price=100),
-    SearchTerm(term_id="ddr5-ecc", query="ddr5 ecc rdimm 32gb", category="dram", threshold_price=60),
-    SearchTerm(term_id="hbm-module", query="hbm2e memory module", category="dram", threshold_price=500),
+    SearchTerm(term_id="ddr5-server", query="ddr5 server memory 64gb", category="dram", max_price=100),
+    SearchTerm(term_id="ddr5-ecc", query="ddr5 ecc rdimm 32gb", category="dram", max_price=60),
+    SearchTerm(term_id="hbm-module", query="hbm2e memory module", category="dram", max_price=500),
     # Graphics cards (consumer)
-    SearchTerm(term_id="rx-7900xtx", query="amd rx 7900 xtx", category="graphics", threshold_price=600),
-    SearchTerm(term_id="rtx-4080", query="nvidia rtx 4080 super", category="graphics", threshold_price=700),
-    SearchTerm(term_id="arc-a770", query="intel arc a770", category="graphics", threshold_price=150),
+    SearchTerm(term_id="rx-7900xtx", query="amd rx 7900 xtx", category="graphics", max_price=600),
+    SearchTerm(term_id="rtx-4080", query="nvidia rtx 4080 super", category="graphics", max_price=700),
+    SearchTerm(term_id="arc-a770", query="intel arc a770", category="graphics", max_price=150),
     # Networking / Datacenter
-    SearchTerm(term_id="mellanox-cx6", query="mellanox connectx-6", category="networking", threshold_price=50),
-    SearchTerm(term_id="nvidia-bluefield", query="nvidia bluefield dpu", category="networking", threshold_price=200),
+    SearchTerm(term_id="mellanox-cx6", query="mellanox connectx-6", category="networking", max_price=50),
+    SearchTerm(term_id="nvidia-bluefield", query="nvidia bluefield dpu", category="networking", max_price=200),
     # Storage
-    SearchTerm(term_id="crucial-t705-2tb", query="Crucial t705 2tb", category="storage", threshold_price=0, min_price=160),
-    SearchTerm(term_id="samsung-990-pro-2tb", query="Samsung 990 pro 2tb ssd", category="storage", threshold_price=0, min_price=150),
+    SearchTerm(term_id="crucial-t705-2tb", query="Crucial t705 2tb", category="storage", max_price=0, min_price=160),
+    SearchTerm(term_id="samsung-990-pro-2tb", query="Samsung 990 pro 2tb ssd", category="storage", max_price=0, min_price=150),
     # DRAM (consumer)
-    SearchTerm(term_id="ddr5-32gb-6000", query="32gb ddr5 6000", category="dram", threshold_price=0, min_price=160),
+    SearchTerm(term_id="ddr5-32gb-6000", query="32gb ddr5 6000", category="dram", max_price=0, min_price=160),
 ]
 
 

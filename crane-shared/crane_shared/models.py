@@ -308,8 +308,8 @@ class EbayListing(BaseModel):
     search_term: str = ""
     first_seen: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     last_seen: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    sold: bool = False
-    sold_at: str = ""
+    has_sales: bool = False
+    first_sale_at: str = ""
 
 
 class SearchTerm(BaseModel):
@@ -319,8 +319,8 @@ class SearchTerm(BaseModel):
     query: str
     category: str = ""
     enabled: bool = True
-    threshold_price: float = 0.0
     min_price: float = 0.0
+    max_price: float = 0.0
     sort_by: str = "price_low_to_high"
     listing_type: str = "buy_it_now"
     last_polled: str = ""

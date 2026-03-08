@@ -32,8 +32,8 @@ export default function TermsPage() {
       query: form.query.trim(),
       category: form.category || 'custom',
       enabled: true,
-      threshold_price: parseFloat(form.threshold) || 0,
       min_price: parseFloat(form.min) || 0,
+      max_price: parseFloat(form.threshold) || 0,
       sort_by: 'price_low_to_high',
       listing_type: 'buy_it_now',
       last_polled: '',
@@ -195,9 +195,9 @@ export default function TermsPage() {
                       <td className="px-2 py-1.5 text-right">
                         <input
                           type="number"
-                          defaultValue={t.threshold_price || ''}
+                          defaultValue={t.max_price || ''}
                           placeholder="—"
-                          onBlur={(e) => handleUpdate(t.term_id, 'threshold_price', e.target.value)}
+                          onBlur={(e) => handleUpdate(t.term_id, 'max_price', e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                           className="w-16 px-1 py-0.5 bg-transparent border border-transparent hover:border-[#333] focus:border-[#555] text-[11px] text-[#888] text-right tabular-nums focus:outline-none focus:text-white"
                         />

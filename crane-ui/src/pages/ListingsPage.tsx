@@ -10,6 +10,7 @@ export default function ListingsPage() {
   const [listings, setListings] = useState<EbayListing[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rawSearch, setRawSearch] = useState(false);
 
   useEffect(() => {
     getTerms()
@@ -17,13 +18,14 @@ export default function ListingsPage() {
       .catch(() => {});
   }, []);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = async (query: string, raw?: boolean) => {
     if (!query) return;
     setActiveTerm(query);
     setLoading(true);
     setError(null);
+    const useRaw = raw !== undefined ? raw : rawSearch;
     try {
-      const data = await getListingsByTerm(query);
+      const data = await getListingsByTerm(query, { raw_search: useRaw });
       setListings(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch listings');
@@ -47,9 +49,9 @@ export default function ListingsPage() {
         <p className="text-[9px] text-[#555] uppercase tracking-wide mt-0.5">Live eBay listings from Countdown API</p>
       </div>
 
-      {/* Term selector */}
+      {/* Term selector + raw toggle */}
       {terms.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
+        <div className="flex flex-wrap items-center gap-1 mb-3">
           {terms.map((t) => (
             <button
               key={t.term_id}
@@ -66,6 +68,21 @@ export default function ListingsPage() {
               )}
             </button>
           ))}
+          <span className="mx-1 text-[#222]">|</span>
+          <button
+            onClick={() => {
+              const next = !rawSearch;
+              setRawSearch(next);
+              if (activeTerm) handleSearch(activeTerm, next);
+            }}
+            className={`px-2 py-0.5 text-[10px] border transition-colors ${
+              rawSearch
+                ? 'bg-[#332a1a] text-[#fa3] border-[#554422]'
+                : 'text-[#555] border-[#333] hover:border-[#555] hover:text-[#ccc]'
+            }`}
+          >
+            raw search
+          </button>
         </div>
       )}
 
@@ -105,7 +122,7 @@ export default function ListingsPage() {
           </thead>
           <tbody>
             {listings.map((item) => (
-              <tr key={item.epid} className={`hover:bg-[#0a0a0a] border-b border-[#111] ${item.sold ? 'opacity-40' : ''}`}>
+              <tr key={item.epid} className={`hover:bg-[#0a0a0a] border-b border-[#111] ${item.has_sales ? 'opacity-40' : ''}`}>
                 <td className="px-2 py-1.5 max-w-md">
                   <a
                     href={item.link}
@@ -129,7 +146,7 @@ export default function ListingsPage() {
                 </td>
                 <td className="px-2 py-1.5 text-center">
                   <span className="inline-flex gap-1">
-                    {item.sold && <span className="text-[9px] px-1 py-px bg-[#331a1a] text-[#f66]">SOLD</span>}
+                    {item.has_sales && <span className="text-[9px] px-1 py-px bg-[#332a1a] text-[#fa3]">HAS SALES</span>}
                     {item.buy_it_now && <span className="text-[9px] px-1 py-px bg-[#1a331a] text-[#4a4]">BIN</span>}
                     {item.free_returns && <span className="text-[9px] px-1 py-px bg-[#1a2233] text-[#6cf]">RET</span>}
                     {item.best_offer && <span className="text-[9px] px-1 py-px bg-[#2a1a33] text-[#c9f]">BO</span>}
