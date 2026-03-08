@@ -32,11 +32,12 @@ def list_all_listings(limit: int = 100):
 
 
 @router.get("/by-term/{query}")
-def list_by_term(query: str, limit: int = 100, raw_search: bool = False):
+def list_by_term(query: str, limit: int = 100, classifier: bool = True):
     """Get listings for a specific search term.
 
     Args:
-        raw_search: If True, skip classifier and price filters (return all raw results).
+        classifier: If True (default), apply classifier and price filters.
+                    If False, return all raw results unfiltered.
     """
     rc = get_redis()
 
@@ -51,7 +52,7 @@ def list_by_term(query: str, limit: int = 100, raw_search: bool = False):
     for epid in sorted(epids):
         listing = rc.get_model(f"crane:feed:listings:{epid}", EbayListing)
         if listing:
-            if not raw_search:
+            if classifier:
                 price = listing.price
                 if min_price and price < min_price:
                     continue

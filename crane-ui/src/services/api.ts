@@ -99,10 +99,10 @@ export async function getListings(limit?: number): Promise<EbayListing[]> {
   return get<EbayListing[]>(`/listings/${q}`);
 }
 
-export async function getListingsByTerm(query: string, opts?: { limit?: number; raw_search?: boolean }): Promise<EbayListing[]> {
+export async function getListingsByTerm(query: string, opts?: { limit?: number; classifier?: boolean }): Promise<EbayListing[]> {
   const params = new URLSearchParams();
   if (opts?.limit) params.set('limit', String(opts.limit));
-  if (opts?.raw_search) params.set('raw_search', 'true');
+  if (opts?.classifier !== undefined) params.set('classifier', String(opts.classifier));
   const q = params.toString() ? `?${params}` : '';
   return get<EbayListing[]>(`/listings/by-term/${encodeURIComponent(query)}${q}`);
 }

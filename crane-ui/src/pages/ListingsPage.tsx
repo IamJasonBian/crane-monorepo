@@ -25,7 +25,7 @@ export default function ListingsPage() {
     setError(null);
     const isClassifierOn = classifier !== undefined ? classifier : classifierOn;
     try {
-      const data = await getListingsByTerm(query, { raw_search: !isClassifierOn });
+      const data = await getListingsByTerm(query, { classifier: isClassifierOn });
       setListings(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch listings');
