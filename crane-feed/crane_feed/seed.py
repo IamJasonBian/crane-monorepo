@@ -37,6 +37,11 @@ SEED_TERMS = [
     # Networking / Datacenter
     SearchTerm(term_id="mellanox-cx6", query="mellanox connectx-6", category="networking", threshold_price=50),
     SearchTerm(term_id="nvidia-bluefield", query="nvidia bluefield dpu", category="networking", threshold_price=200),
+    # Storage
+    SearchTerm(term_id="crucial-t705-2tb", query="Crucial t705 2tb", category="storage", threshold_price=0, min_price=160),
+    SearchTerm(term_id="samsung-990-pro-2tb", query="Samsung 990 pro 2tb ssd", category="storage", threshold_price=0, min_price=150),
+    # DRAM (consumer)
+    SearchTerm(term_id="ddr5-32gb-6000", query="32gb ddr5 6000", category="dram", threshold_price=0, min_price=160),
 ]
 
 

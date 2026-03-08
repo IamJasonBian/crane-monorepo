@@ -139,6 +139,12 @@ class CountdownEbayPoller:
             if not listing.epid:
                 continue
 
+            # Skip listings outside price bounds
+            if term.min_price > 0 and listing.price < term.min_price:
+                continue
+            if term.threshold_price > 0 and listing.price > term.threshold_price:
+                continue
+
             # Check if we've seen this item before
             existing = self._redis.get_model(
                 f"crane:feed:listings:{listing.epid}", EbayListing,

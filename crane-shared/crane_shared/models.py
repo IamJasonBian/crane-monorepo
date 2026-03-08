@@ -320,6 +320,7 @@ class SearchTerm(BaseModel):
     category: str = ""
     enabled: bool = True
     threshold_price: float = 0.0
+    min_price: float = 0.0
     sort_by: str = "price_low_to_high"
     listing_type: str = "buy_it_now"
     last_polled: str = ""

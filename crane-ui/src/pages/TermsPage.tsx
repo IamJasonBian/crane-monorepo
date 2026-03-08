@@ -7,7 +7,7 @@ import type { SearchTerm } from '../services/types';
 export default function TermsPage() {
   const [terms, setTerms] = useState<SearchTerm[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ query: '', category: '', threshold: '' });
+  const [form, setForm] = useState({ query: '', category: '', threshold: '', min: '' });
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -33,6 +33,7 @@ export default function TermsPage() {
       category: form.category || 'custom',
       enabled: true,
       threshold_price: parseFloat(form.threshold) || 0,
+      min_price: parseFloat(form.min) || 0,
       sort_by: 'price_low_to_high',
       listing_type: 'buy_it_now',
       last_polled: '',
@@ -41,7 +42,7 @@ export default function TermsPage() {
     };
     try {
       await createTerm(term);
-      setForm({ query: '', category: '', threshold: '' });
+      setForm({ query: '', category: '', threshold: '', min: '' });
       setShowAdd(false);
       load();
     } catch (err) {
@@ -110,6 +111,16 @@ export default function TermsPage() {
               />
             </div>
             <div className="w-24">
+              <label className="block text-[9px] font-medium text-[#555] uppercase tracking-wide mb-1">Min $</label>
+              <input
+                type="number"
+                value={form.min}
+                onChange={(e) => setForm({ ...form, min: e.target.value })}
+                placeholder="0"
+                className="w-full px-2 py-1 bg-[#0a0a0a] border border-[#333] text-[11px] text-white focus:outline-none focus:border-[#555]"
+              />
+            </div>
+            <div className="w-24">
               <label className="block text-[9px] font-medium text-[#555] uppercase tracking-wide mb-1">Max $</label>
               <input
                 type="number"
@@ -149,6 +160,7 @@ export default function TermsPage() {
                   <tr>
                     <th className="text-left text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Query</th>
                     <th className="text-right text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Results</th>
+                    <th className="text-right text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Min $</th>
                     <th className="text-right text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Max $</th>
                     <th className="text-left text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Polled</th>
                     <th className="text-center text-[#555] font-medium px-2 py-1 border-b border-[#222] uppercase text-[9px] tracking-wide">Status</th>
@@ -160,6 +172,9 @@ export default function TermsPage() {
                     <tr key={t.term_id} className="hover:bg-[#0a0a0a] border-b border-[#111]">
                       <td className="px-2 py-1.5 text-white font-medium">{t.query}</td>
                       <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">{t.result_count || '\u2014'}</td>
+                      <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">
+                        {t.min_price > 0 ? `$${t.min_price.toLocaleString()}` : '\u2014'}
+                      </td>
                       <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">
                         {t.threshold_price > 0 ? `$${t.threshold_price.toLocaleString()}` : '\u2014'}
                       </td>
