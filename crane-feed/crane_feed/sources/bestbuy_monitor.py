@@ -1,24 +1,24 @@
 """Best Buy product monitor.
 
-Tracks specific Best Buy product URLs, checks price/availability,
-and sends Slack alerts with direct links.
+Tracks specific Best Buy product URLs, checks price/availability
+via Best Buy's Products API, and sends Slack alerts with direct cart links.
 
-No API key required — scrapes product pages for JSON-LD pricing data.
+Requires BESTBUY_API_KEY env var (free at developer.bestbuy.com).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
 
 from crane_shared.redis_client import RedisClient
-from crane_feed.notifier import notify_listing
 from crane_shared.models import EbayListing, SellerInfo
 
 log = logging.getLogger("crane-feed.bestbuy")
@@ -26,21 +26,13 @@ log = logging.getLogger("crane-feed.bestbuy")
 # Best Buy add-to-cart URL format
 BESTBUY_CART_URL = "https://www.bestbuy.com/cart/add?skuId={sku}"
 
-# Redis key prefix for tracked products
+# Best Buy Products API
+BESTBUY_API_URL = "https://api.bestbuy.com/v1/products/{sku}.json"
+BESTBUY_API_FIELDS = "sku,name,salePrice,regularPrice,onSale,inStoreAvailability,onlineAvailability,addToCartUrl,url,condition"
+
+# Redis key prefixes
 BB_PRODUCTS_KEY = "crane:feed:bestbuy:products"
 BB_PRICE_KEY = "crane:feed:bestbuy:price:{product_id}"
-
-# Headers to mimic a real browser
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-}
 
 
 def _extract_sku_from_url(url: str) -> Optional[str]:
@@ -50,86 +42,19 @@ def _extract_sku_from_url(url: str) -> Optional[str]:
       /product/.../JCQ6HQXJVH
       /site/.../1234567.p?skuId=1234567
     """
-    # Try /product/{slug}/{sku} format
     m = re.search(r"/product/[^/]+/([A-Za-z0-9]+)(?:\?|$)", url)
     if m:
         return m.group(1)
-    # Try skuId query param
     m = re.search(r"skuId=(\d+)", url)
     if m:
         return m.group(1)
-    # Try /site/{slug}/{sku}.p format
     m = re.search(r"/site/[^/]+/(\d+)\.p", url)
     if m:
         return m.group(1)
-    # Fallback: last path segment
     m = re.search(r"/([A-Za-z0-9]+)(?:\?|$)", url)
     if m:
         return m.group(1)
     return None
-
-
-def _extract_numeric_sku(html: str) -> Optional[str]:
-    """Try to find numeric SKU ID from page HTML for cart link."""
-    # Look for skuId in various places
-    m = re.search(r'"skuId"\s*:\s*"(\d+)"', html)
-    if m:
-        return m.group(1)
-    m = re.search(r'data-sku-id="(\d+)"', html)
-    if m:
-        return m.group(1)
-    return None
-
-
-def _extract_price_from_html(html: str) -> Optional[float]:
-    """Extract price from Best Buy product page HTML.
-
-    Tries JSON-LD structured data first, then falls back to price patterns.
-    """
-    # Try JSON-LD (most reliable)
-    for m in re.finditer(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL):
-        try:
-            data = json.loads(m.group(1))
-            # Handle both single object and array
-            items = data if isinstance(data, list) else [data]
-            for item in items:
-                if item.get("@type") == "Product":
-                    offers = item.get("offers", {})
-                    if isinstance(offers, list):
-                        offers = offers[0] if offers else {}
-                    price = offers.get("price")
-                    if price:
-                        return float(price)
-        except (json.JSONDecodeError, ValueError, KeyError):
-            continue
-
-    # Fallback: look for priceWithEhf or customer-price patterns
-    m = re.search(r'"currentPrice"\s*:\s*([\d.]+)', html)
-    if m:
-        try:
-            return float(m.group(1))
-        except ValueError:
-            pass
-
-    # Last resort: dollar amount near "price" context
-    m = re.search(r'class="priceView[^"]*"[^>]*>\s*\$\s*([\d,]+\.?\d*)', html)
-    if m:
-        try:
-            return float(m.group(1).replace(",", ""))
-        except ValueError:
-            pass
-
-    return None
-
-
-def _check_availability(html: str) -> bool:
-    """Check if the product appears to be in stock."""
-    if '"ADD_TO_CART"' in html or '"Add to Cart"' in html:
-        return True
-    if '"SOLD_OUT"' in html or '"Sold Out"' in html:
-        return False
-    # Default to unknown/available
-    return True
 
 
 class BestBuyMonitor:
@@ -138,10 +63,11 @@ class BestBuyMonitor:
     def __init__(
         self,
         redis_client: RedisClient,
-        poll_interval: float = 1800.0,  # 30 min default
+        poll_interval: float = 300.0,
     ):
         self._redis = redis_client
         self.poll_interval = poll_interval
+        self._api_key = os.environ.get("BESTBUY_API_KEY", "")
 
     def add_product(self, url: str, name: str = "", target_price: float = 0.0):
         """Add a product URL to monitor."""
@@ -155,7 +81,7 @@ class BestBuyMonitor:
             "url": url,
             "name": name,
             "target_price": target_price,
-            "added_at": datetime.utcnow().isoformat(),
+            "added_at": datetime.now(timezone.utc).isoformat(),
         }
         self._redis.client.hset(BB_PRODUCTS_KEY, product_id, json.dumps(product))
         log.info(f"Tracking Best Buy product: {product_id} ({name})")
@@ -179,7 +105,10 @@ class BestBuyMonitor:
 
     def run(self):
         """Main polling loop."""
-        log.info("Best Buy monitor started")
+        log.info("Best Buy monitor started (poll_interval=%ds)", self.poll_interval)
+        if not self._api_key:
+            log.warning("BESTBUY_API_KEY not set — monitor will skip API checks. "
+                        "Get a free key at developer.bestbuy.com")
         while True:
             products = self.list_products()
             if not products:
@@ -192,7 +121,7 @@ class BestBuyMonitor:
                     self._check_product(product)
                 except Exception as e:
                     log.error(f"Best Buy check failed for {product.get('product_id')}: {e}")
-                time.sleep(10)  # Be polite between requests
+                time.sleep(2)  # Respect rate limits
 
             time.sleep(self.poll_interval)
 
@@ -204,31 +133,47 @@ class BestBuyMonitor:
 
         log.info(f"Checking Best Buy product: {name} ({product_id})")
 
+        if not self._api_key:
+            log.debug(f"Skipping {product_id} — no API key")
+            return
+
+        # Fetch from Best Buy Products API
+        api_url = BESTBUY_API_URL.format(sku=product_id)
+        params = {
+            "apiKey": self._api_key,
+            "show": BESTBUY_API_FIELDS,
+            "format": "json",
+        }
+
         try:
-            with httpx.Client(follow_redirects=True) as client:
-                resp = client.get(url, headers=HEADERS, timeout=30)
+            with httpx.Client(timeout=15) as client:
+                resp = client.get(api_url, params=params)
                 resp.raise_for_status()
         except httpx.HTTPStatusError as e:
-            log.warning(f"Best Buy returned {e.response.status_code} for {product_id}")
+            log.warning(f"Best Buy API returned {e.response.status_code} for {product_id}: {e.response.text[:200]}")
             return
         except httpx.TimeoutException:
-            log.warning(f"Best Buy timeout for {product_id}")
+            log.warning(f"Best Buy API timeout for {product_id}")
             return
 
-        html = resp.text
-        price = _extract_price_from_html(html)
-        available = _check_availability(html)
-        numeric_sku = _extract_numeric_sku(html)
+        data = resp.json()
+        price = data.get("salePrice") or data.get("regularPrice")
+        available = data.get("onlineAvailability", False)
+        api_name = data.get("name", name)
+        cart_url = data.get("addToCartUrl", BESTBUY_CART_URL.format(sku=product_id))
+        product_url = data.get("url", url)
+        condition = data.get("condition", "")
+        on_sale = data.get("onSale", False)
 
-        # Build cart link
-        cart_sku = numeric_sku or product_id
-        cart_link = BESTBUY_CART_URL.format(sku=cart_sku)
+        # Use API name if we don't have a custom one
+        if not name or name == product_id:
+            name = api_name
+
+        now = datetime.now(timezone.utc).isoformat()
 
         price_key = BB_PRICE_KEY.format(product_id=product_id)
         previous_raw = self._redis.client.get(price_key)
         previous_price = float(previous_raw) if previous_raw else None
-
-        now = datetime.utcnow().isoformat()
 
         # Store current price
         if price:
@@ -245,7 +190,9 @@ class BestBuyMonitor:
         # Check previous availability
         avail_key = f"crane:feed:bestbuy:avail:{product_id}"
         prev_avail_raw = self._redis.client.get(avail_key)
-        was_available = prev_avail_raw and prev_avail_raw.decode() == "1"
+        was_available = prev_avail_raw and (
+            prev_avail_raw.decode() if isinstance(prev_avail_raw, bytes) else prev_avail_raw
+        ) == "1"
         self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
 
         # Decide if we should alert
@@ -253,59 +200,59 @@ class BestBuyMonitor:
         reason = ""
 
         if available and not was_available:
-            # Just came back in stock!
             should_alert = True
             price_str = f"${price:.2f}" if price else "unknown price"
             reason = f"[Best Buy] 🚨 BACK IN STOCK! {price_str}"
         elif price and previous_price is None:
-            # First time seeing this product
             should_alert = True
             reason = f"[Best Buy] Now tracking: ${price:.2f}"
+            if on_sale:
+                reason += " (ON SALE)"
         elif price and previous_price and price < previous_price:
-            # Price dropped
             should_alert = True
             reason = f"[Best Buy] Price drop: ${previous_price:.2f} → ${price:.2f}"
         elif price and target_price and price <= target_price:
-            # Hit target price
             should_alert = True
             reason = f"[Best Buy] Target hit! ${price:.2f} (target: ${target_price:.2f})"
 
         if should_alert:
-            # Create a listing-like object for the notifier
             listing = EbayListing(
                 epid=f"bb-{product_id}",
                 title=name,
-                link=url,
+                link=product_url if product_url.startswith("http") else url,
                 price=price or 0,
                 price_raw=f"${price:.2f}" if price else "",
                 buy_it_now=True,
-                condition="Refurbished" if "refurbished" in name.lower() else "",
+                condition=condition or ("Refurbished" if "refurbished" in name.lower() else ""),
                 seller=SellerInfo(name="Best Buy"),
                 search_term="bestbuy-monitor",
                 first_seen=now,
                 last_seen=now,
             )
-            _notify_bestbuy(listing, reason=reason, cart_link=cart_link)
+            _notify_bestbuy(listing, reason=reason, cart_link=cart_url, available=available)
 
-        status = "in stock" if available else "sold out"
+        status = "IN STOCK" if available else "out of stock"
         price_str = f"${price:.2f}" if price else "unknown"
         log.info(f"Best Buy {product_id}: {price_str}, {status}")
 
 
-def _notify_bestbuy(listing: EbayListing, reason: str, cart_link: str) -> bool:
+def _notify_bestbuy(listing: EbayListing, reason: str, cart_link: str, available: bool = False) -> bool:
     """Send a Slack notification with cart link for Best Buy products."""
-    import os
-
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
     if not webhook_url:
         log.debug("No SLACK_WEBHOOK_URL set, skipping notification")
         return False
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    stock_indicator = ":white_check_mark: In Stock" if available else ":x: Out of Stock"
 
     text = (
         f":shopping_trolley: *{reason}*\n"
         f"*{listing.title}*\n"
         f"Price: *${listing.price:.2f}*"
         + (f" | {listing.condition}" if listing.condition else "")
+        + f"\nStatus: {stock_indicator}"
+        + f"\nChecked: {now}"
         + f"\n<{listing.link}|View on Best Buy>"
         + f"  |  <{cart_link}|:point_right: Add to Cart>"
     )
