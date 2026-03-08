@@ -122,6 +122,16 @@ export async function createTerm(term: SearchTerm): Promise<SearchTerm> {
   return post<SearchTerm>('/terms/', term);
 }
 
+export async function updateTerm(termId: string, updates: Partial<SearchTerm>): Promise<SearchTerm> {
+  const resp = await fetch(`${BASE}/terms/${termId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.json();
+}
+
 export async function deleteTerm(termId: string): Promise<void> {
   return del(`/terms/${termId}`);
 }

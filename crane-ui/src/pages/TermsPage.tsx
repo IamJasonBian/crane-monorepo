@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, RefreshCw } from 'lucide-react';
-import { getTerms, createTerm, deleteTerm } from '../services/api';
+import { getTerms, createTerm, deleteTerm, updateTerm } from '../services/api';
 import { timeAgo } from '../utils/formatters';
 import type { SearchTerm } from '../services/types';
 
@@ -56,6 +56,16 @@ export default function TermsPage() {
       load();
     } catch (err) {
       console.error('Failed to delete term:', err);
+    }
+  };
+
+  const handleUpdate = async (termId: string, field: string, value: string) => {
+    const num = parseFloat(value) || 0;
+    try {
+      await updateTerm(termId, { [field]: num });
+      load();
+    } catch (err) {
+      console.error('Failed to update term:', err);
     }
   };
 
@@ -172,11 +182,25 @@ export default function TermsPage() {
                     <tr key={t.term_id} className="hover:bg-[#0a0a0a] border-b border-[#111]">
                       <td className="px-2 py-1.5 text-white font-medium">{t.query}</td>
                       <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">{t.result_count || '\u2014'}</td>
-                      <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">
-                        {t.min_price > 0 ? `$${t.min_price.toLocaleString()}` : '\u2014'}
+                      <td className="px-2 py-1.5 text-right">
+                        <input
+                          type="number"
+                          defaultValue={t.min_price || ''}
+                          placeholder="—"
+                          onBlur={(e) => handleUpdate(t.term_id, 'min_price', e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          className="w-16 px-1 py-0.5 bg-transparent border border-transparent hover:border-[#333] focus:border-[#555] text-[11px] text-[#888] text-right tabular-nums focus:outline-none focus:text-white"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 text-right text-[#888] tabular-nums">
-                        {t.threshold_price > 0 ? `$${t.threshold_price.toLocaleString()}` : '\u2014'}
+                      <td className="px-2 py-1.5 text-right">
+                        <input
+                          type="number"
+                          defaultValue={t.threshold_price || ''}
+                          placeholder="—"
+                          onBlur={(e) => handleUpdate(t.term_id, 'threshold_price', e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          className="w-16 px-1 py-0.5 bg-transparent border border-transparent hover:border-[#333] focus:border-[#555] text-[11px] text-[#888] text-right tabular-nums focus:outline-none focus:text-white"
+                        />
                       </td>
                       <td className="px-2 py-1.5 text-[#666]">
                         {t.last_polled ? timeAgo(t.last_polled) : 'never'}
