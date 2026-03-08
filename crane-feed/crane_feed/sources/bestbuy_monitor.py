@@ -242,11 +242,22 @@ class BestBuyMonitor:
             )
             self._redis.client.ltrim(history_key, 0, 499)
 
+        # Check previous availability
+        avail_key = f"crane:feed:bestbuy:avail:{product_id}"
+        prev_avail_raw = self._redis.client.get(avail_key)
+        was_available = prev_avail_raw and prev_avail_raw.decode() == "1"
+        self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
+
         # Decide if we should alert
         should_alert = False
         reason = ""
 
-        if price and previous_price is None:
+        if available and not was_available:
+            # Just came back in stock!
+            should_alert = True
+            price_str = f"${price:.2f}" if price else "unknown price"
+            reason = f"[Best Buy] 🚨 BACK IN STOCK! {price_str}"
+        elif price and previous_price is None:
             # First time seeing this product
             should_alert = True
             reason = f"[Best Buy] Now tracking: ${price:.2f}"
