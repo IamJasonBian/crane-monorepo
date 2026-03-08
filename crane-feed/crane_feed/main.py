@@ -63,12 +63,22 @@ def main():
             target_price=60.0,
         )
     def _bb_thread_wrapper():
+        import traceback as _tb
         try:
+            # Write to Redis so we can confirm this thread started
+            redis_client.client.set("crane:feed:bestbuy:thread_status",
+                                     "started", ex=600)
             bb_monitor.run()
         except Exception as e:
-            log.error(f"Best Buy monitor thread crashed: {e}", exc_info=True)
-            from crane_feed.sources.bestbuy_monitor import _slack_log
-            _slack_log(f"THREAD CRASHED: {e}")
+            err = _tb.format_exc()
+            log.error(f"Best Buy monitor thread crashed: {err}")
+            redis_client.client.set("crane:feed:bestbuy:thread_status",
+                                     f"crashed: {err[:500]}", ex=600)
+            try:
+                from crane_feed.sources.bestbuy_monitor import _slack_log
+                _slack_log(f"THREAD CRASHED: {err[:300]}")
+            except Exception:
+                pass
 
     bb_thread = threading.Thread(target=_bb_thread_wrapper, daemon=True, name="bestbuy-monitor")
     bb_thread.start()
