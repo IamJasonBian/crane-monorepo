@@ -16,7 +16,6 @@ import threading
 from crane_shared import RedisClient, EventBus
 from crane_feed.sources.countdown_ebay import CountdownEbayPoller
 from crane_feed.sources.slickdeals_rss import SlickdealsPoller
-from crane_feed.sources.bestbuy_monitor import BestBuyMonitor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 log = logging.getLogger("crane-feed")
@@ -47,6 +46,7 @@ def main():
 
     # Start Best Buy product monitor in background (5 min intervals)
     try:
+        from crane_feed.sources.bestbuy_monitor import BestBuyMonitor
         bb_monitor = BestBuyMonitor(redis_client, poll_interval=300)
         bb_products = bb_monitor.list_products()
         tracked_ids = {p.get("product_id") for p in bb_products}
