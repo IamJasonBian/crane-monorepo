@@ -62,7 +62,15 @@ def main():
             name="Samsung 980 Pro 1TB (GS Certified Refurbished)",
             target_price=60.0,
         )
-    bb_thread = threading.Thread(target=bb_monitor.run, daemon=True, name="bestbuy-monitor")
+    def _bb_thread_wrapper():
+        try:
+            bb_monitor.run()
+        except Exception as e:
+            log.error(f"Best Buy monitor thread crashed: {e}", exc_info=True)
+            from crane_feed.sources.bestbuy_monitor import _slack_log
+            _slack_log(f"THREAD CRASHED: {e}")
+
+    bb_thread = threading.Thread(target=_bb_thread_wrapper, daemon=True, name="bestbuy-monitor")
     bb_thread.start()
     log.info("Best Buy monitor started in background thread")
 
