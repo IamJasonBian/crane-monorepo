@@ -18,7 +18,7 @@ services:
   crane-feed:
     build:
       context: .
-      dockerfile: crane-feed/Dockerfile
+      dockerfile: Dockerfile
     depends_on:
       redis:
         condition: service_healthy
@@ -26,6 +26,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       COUNTDOWN_API_KEY: ${COUNTDOWN_API_KEY}
+      BESTBUY_API_KEY: ${BESTBUY_API_KEY}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
     restart: unless-stopped
 

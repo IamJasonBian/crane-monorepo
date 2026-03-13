@@ -1,10 +1,10 @@
 """Best Buy product monitor.
 
 Tracks specific Best Buy product URLs, checks price/availability
-using Playwright browser automation, and sends Slack alerts with direct cart links.
+using the Best Buy Products API, and sends Slack alerts with direct cart links.
 
-Best Buy blocks all server-side HTTP requests; a real browser is required.
-Uses headed Chromium with xvfb on Linux (Render) or native display on macOS.
+Uses the official Best Buy Developer API (api.bestbuy.com) for near real-time
+pricing and availability data. Requires a BESTBUY_API_KEY env var.
 """
 
 from __future__ import annotations
@@ -26,6 +26,9 @@ log = logging.getLogger("crane-feed.bestbuy")
 
 # Best Buy add-to-cart URL format
 BESTBUY_CART_URL = "https://www.bestbuy.com/cart/add?skuId={sku}"
+
+# Best Buy Products API
+BESTBUY_API_URL = "https://api.bestbuy.com/v1/products/{sku}.json"
 
 # Redis key prefixes
 BB_PRODUCTS_KEY = "crane:feed:bestbuy:products"
@@ -49,69 +52,51 @@ def _extract_sku_from_url(url: str) -> Optional[str]:
     return None
 
 
-def _scrape_product(url: str, max_retries: int = 3) -> Optional[dict]:
-    """Load a Best Buy product page with Playwright and extract price/availability.
+def _fetch_product_api(sku: str, api_key: str, max_retries: int = 3) -> Optional[dict]:
+    """Fetch product data from the Best Buy Products API.
 
-    Returns dict with keys: price, available, prices_on_page, title
+    Returns dict with keys: price, available, title, condition, on_sale, regular_price
     or None if all retries fail.
     """
-    from playwright.sync_api import sync_playwright
+    url = BESTBUY_API_URL.format(sku=sku)
+    params = {
+        "apiKey": api_key,
+        "show": "sku,name,salePrice,regularPrice,onSale,orderable,inStoreAvailability,onlineAvailability,condition",
+        "format": "json",
+    }
 
     for attempt in range(1, max_retries + 1):
         try:
-            with sync_playwright() as p:
-                # Firefox avoids Best Buy's Chromium-specific bot detection
-                browser = p.firefox.launch(headless=False)
-                context = browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
-                    locale="en-US",
-                )
-                page = context.new_page()
+            with httpx.Client() as client:
+                resp = client.get(url, params=params, timeout=15)
+                if resp.status_code == 404:
+                    log.warning(f"Product {sku} not found in Best Buy API (404)")
+                    return None
+                resp.raise_for_status()
+                data = resp.json()
 
-                # Warm up with homepage to get cookies
-                try:
-                    page.goto("https://www.bestbuy.com", wait_until="domcontentloaded", timeout=15000)
-                    page.wait_for_timeout(2000)
-                except Exception:
-                    pass  # Homepage warmup is best-effort
+            price = data.get("salePrice") or data.get("regularPrice")
+            available = (
+                data.get("onlineAvailability", False)
+                or data.get("inStoreAvailability", False)
+            )
+            orderable = data.get("orderable", "")
 
-                resp = page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                if not resp or resp.status >= 400:
-                    log.warning(f"Best Buy returned status {resp.status if resp else 'none'} (attempt {attempt})")
-                    browser.close()
-                    time.sleep(5 * attempt)
-                    continue
+            return {
+                "price": float(price) if price else None,
+                "available": bool(available) or orderable == "Available",
+                "title": data.get("name", ""),
+                "condition": data.get("condition", ""),
+                "on_sale": data.get("onSale", False),
+                "regular_price": data.get("regularPrice"),
+            }
 
-                page.wait_for_timeout(4000)
-
-                title = page.title()
-                body = page.inner_text("body")
-
-                # Extract all dollar amounts from page
-                prices = re.findall(r"\$[\d,]+\.\d{2}", body)
-
-                # Primary price is the first one on the page (product hero price)
-                price = None
-                if prices:
-                    price = float(prices[0].replace("$", "").replace(",", ""))
-
-                # Sold Out takes priority — both buttons can appear on the page
-                sold = page.query_selector('button:has-text("Sold Out")')
-                atc = page.query_selector('button:has-text("Add to Cart")')
-                available = bool(atc) and not bool(sold)
-
-                browser.close()
-
-                return {
-                    "price": price,
-                    "available": available,
-                    "prices_on_page": prices[:10],
-                    "title": title,
-                }
-
+        except httpx.HTTPStatusError as e:
+            log.warning(f"Best Buy API error (attempt {attempt}/{max_retries}): {e}")
+            time.sleep(2 * attempt)
         except Exception as e:
-            log.warning(f"Playwright scrape failed (attempt {attempt}/{max_retries}): {e}")
-            time.sleep(5 * attempt)
+            log.warning(f"Best Buy API request failed (attempt {attempt}/{max_retries}): {e}")
+            time.sleep(2 * attempt)
 
     return None
 
@@ -126,6 +111,7 @@ class BestBuyMonitor:
     ):
         self._redis = redis_client
         self.poll_interval = poll_interval
+        self._api_key = os.environ.get("BESTBUY_API_KEY", "")
 
     def add_product(self, url: str, name: str = "", target_price: float = 0.0):
         """Add a product URL to monitor."""
@@ -165,18 +151,13 @@ class BestBuyMonitor:
         """Main polling loop."""
         log.info("Best Buy monitor started (poll_interval=%ds)", self.poll_interval)
 
-        # Verify Playwright is available
-        try:
-            from playwright.sync_api import sync_playwright
-            log.info("Playwright available for browser automation")
-        except ImportError:
-            msg = "Playwright not installed — Best Buy monitor disabled."
+        if not self._api_key:
+            msg = "BESTBUY_API_KEY not set — Best Buy monitor disabled."
             log.error(msg)
             _slack_log(msg)
             return
 
-        # Send startup notification
-        _slack_log(f"Best Buy monitor started. Tracking {len(self.list_products())} products. Poll: {self.poll_interval}s")
+        _slack_log(f"Best Buy monitor started (API mode). Tracking {len(self.list_products())} products. Poll: {self.poll_interval}s")
 
         while True:
             products = self.list_products()
@@ -192,7 +173,7 @@ class BestBuyMonitor:
                     msg = f"Best Buy check failed for {product.get('product_id')}: {e}"
                     log.error(msg)
                     _slack_log(msg)
-                time.sleep(15)  # Pause between products to avoid rate limits
+                time.sleep(5)  # Small delay between API calls
 
             time.sleep(self.poll_interval)
 
@@ -204,19 +185,18 @@ class BestBuyMonitor:
 
         log.info(f"Checking Best Buy product: {name} ({product_id})")
 
-        result = _scrape_product(url)
+        result = _fetch_product_api(product_id, self._api_key)
         if result is None:
-            msg = f"Could not scrape {product_id} after retries"
+            msg = f"Could not fetch {product_id} from API after retries"
             log.warning(msg)
             _slack_log(msg)
             return
 
         price = result["price"]
         available = result["available"]
-        page_title = result["title"]
 
-        log.info(f"Scraped {product_id}: price=${price}, available={available}, "
-                 f"all_prices={result['prices_on_page']}")
+        log.info(f"API response {product_id}: price=${price}, available={available}, "
+                 f"on_sale={result.get('on_sale')}")
 
         now = datetime.now(timezone.utc).isoformat()
         cart_link = BESTBUY_CART_URL.format(sku=product_id)
@@ -251,13 +231,13 @@ class BestBuyMonitor:
         if available and not was_available:
             should_alert = True
             price_str = f"${price:.2f}" if price else "unknown price"
-            reason = f"[Best Buy] 🚨 BACK IN STOCK! {price_str}"
+            reason = f"[Best Buy] BACK IN STOCK! {price_str}"
         elif price and previous_price is None:
             should_alert = True
             reason = f"[Best Buy] Now tracking: ${price:.2f}"
         elif price and previous_price and price < previous_price:
             should_alert = True
-            reason = f"[Best Buy] Price drop: ${previous_price:.2f} → ${price:.2f}"
+            reason = f"[Best Buy] Price drop: ${previous_price:.2f} -> ${price:.2f}"
         elif price and target_price and price <= target_price:
             should_alert = True
             reason = f"[Best Buy] Target hit! ${price:.2f} (target: ${target_price:.2f})"
@@ -270,7 +250,7 @@ class BestBuyMonitor:
                 price=price or 0,
                 price_raw=f"${price:.2f}" if price else "",
                 buy_it_now=True,
-                condition="Refurbished" if "refurbished" in name.lower() else "",
+                condition=result.get("condition", ""),
                 seller=SellerInfo(name="Best Buy"),
                 search_term="bestbuy-monitor",
                 first_seen=now,

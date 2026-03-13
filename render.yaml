@@ -13,5 +13,7 @@ services:
         sync: false
       - key: COUNTDOWN_API_KEY
         sync: false
+      - key: BESTBUY_API_KEY
+        sync: false
       - key: SLACK_WEBHOOK_URL
         sync: false

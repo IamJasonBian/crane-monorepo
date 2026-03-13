@@ -30,7 +30,7 @@ def main():
         return
 
     # Debug breadcrumb — confirm this code version is running
-    redis_client.client.set("crane:feed:main_version", "fix-dockerfile-path", ex=3600)
+    redis_client.client.set("crane:feed:main_version", "bestbuy-api-mode", ex=3600)
 
     event_bus = EventBus(redis_client)
     countdown_poller = CountdownEbayPoller(redis_client, event_bus)

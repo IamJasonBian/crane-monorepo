@@ -85,6 +85,18 @@ def remove_product(product_id: str):
     return {"status": "removed", "product_id": product_id}
 
 
+@router.get("/status")
+def monitor_status():
+    """Get Best Buy monitor thread status from Redis."""
+    rc = get_redis()
+    thread_status = rc.client.get("crane:feed:bestbuy:thread_status")
+    main_version = rc.client.get("crane:feed:main_version")
+    return {
+        "thread_status": thread_status.decode() if isinstance(thread_status, bytes) else thread_status,
+        "main_version": main_version.decode() if isinstance(main_version, bytes) else main_version,
+    }
+
+
 @router.get("/{product_id}/history")
 def get_price_history(product_id: str, limit: int = 100):
     """Get price history for a tracked Best Buy product."""
