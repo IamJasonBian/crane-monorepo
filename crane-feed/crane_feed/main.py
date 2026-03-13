@@ -50,7 +50,7 @@ def main():
     # Start Best Buy product monitor in background (5 min intervals)
     try:
         from crane_feed.sources.bestbuy_monitor import BestBuyMonitor
-        bb_monitor = BestBuyMonitor(redis_client, poll_interval=300)
+        bb_monitor = BestBuyMonitor(redis_client, poll_interval=0.5)
         # Remove old alphanumeric product IDs from Playwright era
         for old_id in ("JCQ6HQXJVH", "JCQ6HRHVGC"):
             bb_monitor.remove_product(old_id)
