@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
@@ -89,16 +90,64 @@ def remove_product(product_id: str):
     return {"status": "removed", "product_id": product_id}
 
 
+def _decode(val):
+    return val.decode() if isinstance(val, bytes) else val
+
+
 @router.get("/status")
 def monitor_status():
-    """Get Best Buy monitor thread status from Redis."""
+    """Get Best Buy monitor liveness, heartbeat, and thread status."""
     rc = get_redis()
     thread_status = rc.client.get("crane:feed:bestbuy:thread_status")
     main_version = rc.client.get("crane:feed:main_version")
+    heartbeat = rc.client.hgetall("crane:feed:bestbuy:heartbeat")
+
+    alive = False
+    heartbeat_age = None
+    if heartbeat:
+        epoch_raw = heartbeat.get(b"last_poll_epoch") or heartbeat.get("last_poll_epoch")
+        if epoch_raw:
+            epoch = float(epoch_raw)
+            heartbeat_age = round(time.time() - epoch, 1)
+            alive = heartbeat_age < 120
+
     return {
-        "thread_status": thread_status.decode() if isinstance(thread_status, bytes) else thread_status,
-        "main_version": main_version.decode() if isinstance(main_version, bytes) else main_version,
+        "thread_status": _decode(thread_status),
+        "main_version": _decode(main_version),
+        "alive": alive,
+        "heartbeat_age_seconds": heartbeat_age,
+        "polls_ok": int(_decode(heartbeat.get(b"polls_ok", b"0") or heartbeat.get("polls_ok", "0"))) if heartbeat else 0,
+        "polls_empty": int(_decode(heartbeat.get(b"polls_empty", b"0") or heartbeat.get("polls_empty", "0"))) if heartbeat else 0,
+        "sku_count": int(_decode(heartbeat.get(b"sku_count", b"0") or heartbeat.get("sku_count", "0"))) if heartbeat else 0,
     }
+
+
+@router.get("/gaps")
+def poll_gaps(threshold: float = 5.0):
+    """Detect gaps in the BB monitor poll log. Returns gaps > threshold seconds."""
+    rc = get_redis()
+    raw = rc.client.lrange("crane:feed:bestbuy:poll_log", 0, -1)
+    if not raw:
+        return {"gaps": [], "total_entries": 0}
+
+    entries = []
+    for item in raw:
+        text = item.decode() if isinstance(item, bytes) else item
+        parts = text.split(":")
+        if len(parts) >= 3:
+            entries.append({"epoch": float(parts[0]), "skus": int(parts[1]), "status": parts[2]})
+
+    gaps = []
+    for i in range(1, len(entries)):
+        delta = entries[i]["epoch"] - entries[i - 1]["epoch"]
+        if delta > threshold:
+            gaps.append({
+                "start": datetime.utcfromtimestamp(entries[i - 1]["epoch"]).isoformat() + "Z",
+                "end": datetime.utcfromtimestamp(entries[i]["epoch"]).isoformat() + "Z",
+                "gap_seconds": round(delta, 1),
+            })
+
+    return {"gaps": gaps, "total_entries": len(entries)}
 
 
 @router.get("/{product_id}/history")

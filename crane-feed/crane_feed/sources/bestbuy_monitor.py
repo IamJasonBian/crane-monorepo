@@ -36,9 +36,12 @@ BESTBUY_API_URL = "https://api.bestbuy.com/v1/products"
 # Redis key prefixes
 BB_PRODUCTS_KEY = "crane:feed:bestbuy:products"
 BB_PRICE_KEY = "crane:feed:bestbuy:price:{product_id}"
+BB_HEARTBEAT_KEY = "crane:feed:bestbuy:heartbeat"
+BB_POLL_LOG_KEY = "crane:feed:bestbuy:poll_log"
 
 # How often to write history entries (avoid Redis bloat at 2 rps)
 HISTORY_INTERVAL = 300  # 5 minutes
+HEARTBEAT_TTL = 120  # seconds — if this expires, monitor is dead
 
 
 def _extract_sku_from_url(url: str) -> Optional[str]:
@@ -114,6 +117,8 @@ class BestBuyMonitor:
         self.poll_interval = poll_interval
         self._api_key = os.environ.get("BESTBUY_API_KEY", "")
         self._last_history_write: dict[str, float] = {}
+        self._polls_ok = 0
+        self._polls_empty = 0
 
     def add_product(self, sku: str, name: str = "", target_price: float = 0.0, url: str = ""):
         """Add a product by numeric SKU to monitor."""
@@ -144,6 +149,30 @@ class BestBuyMonitor:
                 continue
         return products
 
+    def _write_heartbeat(self, sku_count: int, empty: bool = False):
+        """Write heartbeat to Redis — proves the monitor is alive."""
+        epoch = time.time()
+        now = datetime.now(timezone.utc).isoformat()
+        if empty:
+            self._polls_empty += 1
+        else:
+            self._polls_ok += 1
+            self._polls_empty = 0
+
+        pipe = self._redis.client.pipeline()
+        pipe.hset(BB_HEARTBEAT_KEY, mapping={
+            "last_poll_ts": now,
+            "last_poll_epoch": str(epoch),
+            "polls_ok": str(self._polls_ok),
+            "polls_empty": str(self._polls_empty),
+            "sku_count": str(sku_count),
+        })
+        pipe.expire(BB_HEARTBEAT_KEY, HEARTBEAT_TTL)
+        status = "empty" if empty else "ok"
+        pipe.rpush(BB_POLL_LOG_KEY, f"{epoch:.3f}:{sku_count}:{status}")
+        pipe.ltrim(BB_POLL_LOG_KEY, -200, -1)
+        pipe.execute()
+
     def run(self):
         """Main polling loop — runs at ~2 rps with batch queries."""
         if not self._api_key:
@@ -171,7 +200,7 @@ class BestBuyMonitor:
                 results = _fetch_products_batch(skus, self._api_key, client)
 
                 if not results:
-                    log.warning("Batch fetch returned no results, retrying in 5s")
+                    self._write_heartbeat(len(skus), empty=True)
                     time.sleep(5)
                     continue
 
@@ -183,6 +212,7 @@ class BestBuyMonitor:
                         except Exception as e:
                             log.error(f"Error processing {product_id}: {e}")
 
+                self._write_heartbeat(len(skus), empty=False)
                 time.sleep(self.poll_interval)
 
     def _process_result(self, product: dict, result: dict):
