@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
@@ -89,15 +90,44 @@ def remove_product(product_id: str):
     return {"status": "removed", "product_id": product_id}
 
 
+def _decode(val):
+    return val.decode() if isinstance(val, bytes) else val
+
+
 @router.get("/status")
 def monitor_status():
-    """Get Best Buy monitor thread status from Redis."""
+    """Get Best Buy monitor liveness, heartbeat, and thread status."""
     rc = get_redis()
     thread_status = rc.client.get("crane:feed:bestbuy:thread_status")
     main_version = rc.client.get("crane:feed:main_version")
+    heartbeat = rc.client.hgetall("crane:feed:bestbuy:heartbeat")
+
+    alive = False
+    heartbeat_age = None
+    if heartbeat:
+        epoch_raw = heartbeat.get(b"last_poll_epoch") or heartbeat.get("last_poll_epoch")
+        if epoch_raw:
+            epoch = float(epoch_raw)
+            heartbeat_age = round(time.time() - epoch, 1)
+            alive = heartbeat_age < 120
+
+    def _int(key):
+        raw = heartbeat.get(key.encode(), heartbeat.get(key, b"0"))
+        return int(_decode(raw)) if raw else 0
+
+    def _str(key):
+        raw = heartbeat.get(key.encode(), heartbeat.get(key, b""))
+        return _decode(raw) if raw else None
+
     return {
-        "thread_status": thread_status.decode() if isinstance(thread_status, bytes) else thread_status,
-        "main_version": main_version.decode() if isinstance(main_version, bytes) else main_version,
+        "thread_status": _decode(thread_status),
+        "main_version": _decode(main_version),
+        "alive": alive,
+        "heartbeat_age_seconds": heartbeat_age,
+        "polls_ok": _int("polls_ok") if heartbeat else 0,
+        "polls_fail": _int("polls_fail") if heartbeat else 0,
+        "uptime_seconds": _int("uptime_seconds") if heartbeat else 0,
+        "effective_rps": _str("effective_rps") if heartbeat else None,
     }
 
 

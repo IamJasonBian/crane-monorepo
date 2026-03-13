@@ -11,7 +11,9 @@ Seeds default search terms on first run, then polls continuously.
 from __future__ import annotations
 
 import logging
+import time
 import threading
+import traceback
 
 from crane_shared import RedisClient, EventBus
 from crane_feed.sources.countdown_ebay import CountdownEbayPoller
@@ -30,7 +32,7 @@ def main():
         return
 
     # Debug breadcrumb — confirm this code version is running
-    redis_client.client.set("crane:feed:main_version", "bestbuy-api-mode", ex=3600)
+    redis_client.client.set("crane:feed:main_version", "watchdog-v1", ex=3600)
 
     event_bus = EventBus(redis_client)
     countdown_poller = CountdownEbayPoller(redis_client, event_bus)
@@ -72,14 +74,14 @@ def main():
             )
         redis_client.client.set("crane:feed:bestbuy:thread_status", "seeded", ex=3600)
 
-        def _bb_thread_wrapper():
-            import traceback as _tb
+        def _bb_run_once():
+            """Run the BB monitor; returns on crash."""
             try:
                 redis_client.client.set("crane:feed:bestbuy:thread_status",
                                          "running", ex=3600)
                 bb_monitor.run()
-            except Exception as e:
-                err = _tb.format_exc()
+            except Exception:
+                err = traceback.format_exc()
                 log.error(f"Best Buy monitor thread crashed: {err}")
                 redis_client.client.set("crane:feed:bestbuy:thread_status",
                                          f"crashed: {err[:500]}", ex=3600)
@@ -89,9 +91,61 @@ def main():
                 except Exception:
                     pass
 
-        bb_thread = threading.Thread(target=_bb_thread_wrapper, daemon=True, name="bestbuy-monitor")
-        bb_thread.start()
-        log.info("Best Buy monitor started in background thread")
+        def _bb_watchdog():
+            """Watchdog: restarts BB monitor thread if it dies or hangs."""
+            max_restarts = 5
+            restart_count = 0
+            bb_thread = None
+
+            while restart_count <= max_restarts:
+                if bb_thread is None or not bb_thread.is_alive():
+                    if bb_thread is not None:
+                        restart_count += 1
+                        msg = f"BB monitor died, restarting ({restart_count}/{max_restarts})"
+                        log.warning(msg)
+                        try:
+                            from crane_feed.sources.bestbuy_monitor import _slack_log
+                            _slack_log(msg)
+                        except Exception:
+                            pass
+                        if restart_count > max_restarts:
+                            break
+
+                    bb_thread = threading.Thread(
+                        target=_bb_run_once, daemon=True,
+                        name=f"bestbuy-monitor-{restart_count}",
+                    )
+                    bb_thread.start()
+
+                # Check heartbeat for silent hangs
+                hb = redis_client.client.hget(
+                    "crane:feed:bestbuy:heartbeat", "last_poll_epoch",
+                )
+                if hb:
+                    age = time.time() - float(hb)
+                    if age > 60:
+                        msg = f"BB heartbeat stale ({age:.0f}s) -- monitor may be hung"
+                        log.error(msg)
+                        try:
+                            from crane_feed.sources.bestbuy_monitor import _slack_log
+                            _slack_log(msg)
+                        except Exception:
+                            pass
+
+                time.sleep(30)
+
+            log.error(f"BB monitor exhausted {max_restarts} restarts")
+            redis_client.client.set("crane:feed:bestbuy:thread_status",
+                                     "watchdog_exhausted", ex=86400)
+            try:
+                from crane_feed.sources.bestbuy_monitor import _slack_log
+                _slack_log(f"BB monitor exhausted {max_restarts} restarts -- manual intervention needed")
+            except Exception:
+                pass
+
+        wd_thread = threading.Thread(target=_bb_watchdog, daemon=True, name="bestbuy-watchdog")
+        wd_thread.start()
+        log.info("Best Buy monitor started with watchdog")
     except Exception as e:
         log.error(f"Failed to start Best Buy monitor: {e}", exc_info=True)
         redis_client.client.set("crane:feed:bestbuy:thread_status",
