@@ -26,13 +26,17 @@ class AddProductRequest(BaseModel):
 
 
 def _extract_sku(url: str) -> str | None:
-    m = re.search(r"/product/[^/]+/([A-Za-z0-9]+)(?:\?|$)", url)
-    if m:
-        return m.group(1)
     m = re.search(r"skuId=(\d+)", url)
     if m:
         return m.group(1)
     m = re.search(r"/site/[^/]+/(\d+)\.p", url)
+    if m:
+        return m.group(1)
+    m = re.search(r"/(\d+)\.p", url)
+    if m:
+        return m.group(1)
+    # Numeric-only path segment (e.g. bestbuy.com/site/6451686.p)
+    m = re.search(r"/(\d{5,})(?:\?|$)", url)
     if m:
         return m.group(1)
     return None

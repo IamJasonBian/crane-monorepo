@@ -51,17 +51,22 @@ def main():
     try:
         from crane_feed.sources.bestbuy_monitor import BestBuyMonitor
         bb_monitor = BestBuyMonitor(redis_client, poll_interval=300)
+        # Remove old alphanumeric product IDs from Playwright era
+        for old_id in ("JCQ6HQXJVH", "JCQ6HRHVGC"):
+            bb_monitor.remove_product(old_id)
+
+        # Seed with numeric SKUs used by the Best Buy Products API
         bb_products = bb_monitor.list_products()
         tracked_ids = {p.get("product_id") for p in bb_products}
-        if "JCQ6HQXJVH" not in tracked_ids:
+        if "6451686" not in tracked_ids:
             bb_monitor.add_product(
-                url="https://www.bestbuy.com/product/samsung-geek-squad-certified-refurbished-980-pro-2tb-internal-ssd-pcie-gen-4-x4-nvme/JCQ6HQXJVH",
+                sku="6451686",
                 name="Samsung 980 Pro 2TB (GS Certified Refurbished)",
                 target_price=80.0,
             )
-        if "JCQ6HRHVGC" not in tracked_ids:
+        if "6432767" not in tracked_ids:
             bb_monitor.add_product(
-                url="https://www.bestbuy.com/product/samsung-geek-squad-certified-refurbished-980-pro-1tb-internal-ssd-pcie-gen-4-x4-nvme/JCQ6HRHVGC",
+                sku="6432767",
                 name="Samsung 980 Pro 1TB (GS Certified Refurbished)",
                 target_price=60.0,
             )

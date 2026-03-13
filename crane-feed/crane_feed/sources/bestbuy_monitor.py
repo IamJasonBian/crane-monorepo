@@ -113,22 +113,17 @@ class BestBuyMonitor:
         self.poll_interval = poll_interval
         self._api_key = os.environ.get("BESTBUY_API_KEY", "")
 
-    def add_product(self, url: str, name: str = "", target_price: float = 0.0):
-        """Add a product URL to monitor."""
-        product_id = _extract_sku_from_url(url)
-        if not product_id:
-            log.error(f"Could not extract SKU from URL: {url}")
-            return
-
+    def add_product(self, sku: str, name: str = "", target_price: float = 0.0, url: str = ""):
+        """Add a product by numeric SKU to monitor."""
         product = {
-            "product_id": product_id,
-            "url": url,
+            "product_id": str(sku),
+            "url": url or f"https://www.bestbuy.com/site/{sku}.p?skuId={sku}",
             "name": name,
             "target_price": target_price,
             "added_at": datetime.now(timezone.utc).isoformat(),
         }
-        self._redis.client.hset(BB_PRODUCTS_KEY, product_id, json.dumps(product))
-        log.info(f"Tracking Best Buy product: {product_id} ({name})")
+        self._redis.client.hset(BB_PRODUCTS_KEY, str(sku), json.dumps(product))
+        log.info(f"Tracking Best Buy product: {sku} ({name})")
 
     def remove_product(self, product_id: str):
         """Stop monitoring a product."""
