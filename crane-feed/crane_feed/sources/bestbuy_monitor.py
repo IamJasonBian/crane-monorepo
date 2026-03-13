@@ -316,7 +316,7 @@ class BestBuyMonitor:
         elif price and previous_price and price < previous_price:
             should_alert = True
             reason = f"[Best Buy] Price drop: ${previous_price:.2f} -> ${price:.2f}"
-        elif price and target_price and price <= target_price:
+        elif price and target_price and price <= target_price and (is_first or price_changed):
             should_alert = True
             reason = f"[Best Buy] Target hit! ${price:.2f} (target: ${target_price:.2f})"
 

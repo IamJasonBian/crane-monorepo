@@ -53,8 +53,8 @@ def main():
     try:
         from crane_feed.sources.bestbuy_monitor import BestBuyMonitor
         bb_monitor = BestBuyMonitor(redis_client, poll_interval=1.0)
-        # Remove old alphanumeric product IDs from Playwright era
-        for old_id in ("JCQ6HQXJVH", "JCQ6HRHVGC"):
+        # Remove old/unwanted product IDs
+        for old_id in ("JCQ6HQXJVH", "JCQ6HRHVGC", "6432767"):
             bb_monitor.remove_product(old_id)
 
         # Seed with numeric SKUs used by the Best Buy Products API
@@ -65,12 +65,6 @@ def main():
                 sku="6451686",
                 name="Samsung 980 Pro 2TB (GS Certified Refurbished)",
                 target_price=80.0,
-            )
-        if "6432767" not in tracked_ids:
-            bb_monitor.add_product(
-                sku="6432767",
-                name="Samsung 980 Pro 1TB (GS Certified Refurbished)",
-                target_price=60.0,
             )
         redis_client.client.set("crane:feed:bestbuy:thread_status", "seeded", ex=3600)
 
