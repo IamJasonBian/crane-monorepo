@@ -75,12 +75,20 @@ def _fetch_products_batch(skus: list[str], api_key: str, client: httpx.Client) -
         "pageSize": len(skus),
     }
 
-    try:
-        resp = client.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        log.warning(f"Best Buy batch API failed: {e}")
+    for attempt in range(3):
+        try:
+            resp = client.get(url, params=params, timeout=10)
+            if resp.status_code == 403:
+                # Rate limited — back off and retry
+                time.sleep(1 + attempt)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except Exception as e:
+            log.warning(f"Best Buy batch API failed (attempt {attempt + 1}): {e}")
+            time.sleep(1 + attempt)
+    else:
         return {}
 
     results = {}
@@ -111,7 +119,7 @@ class BestBuyMonitor:
     def __init__(
         self,
         redis_client: RedisClient,
-        poll_interval: float = 0.5,  # 2 requests per second
+        poll_interval: float = 1.0,  # 1 rps (BB API free tier limit)
     ):
         self._redis = redis_client
         self.poll_interval = poll_interval
