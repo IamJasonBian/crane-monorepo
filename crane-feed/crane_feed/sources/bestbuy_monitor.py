@@ -6,8 +6,9 @@ using the Best Buy Products API, and sends Slack alerts with direct cart links.
 Uses the official Best Buy Developer API (api.bestbuy.com) for near real-time
 pricing and availability data. Requires a BESTBUY_API_KEY env var.
 
-Polls at ~2 requests/second using batch SKU queries. Records history every
-5 minutes to avoid Redis bloat while still catching restocks instantly.
+Polls at ~2 requests/second using batch SKU queries. Heartbeat written every
+30s to prove liveness. Daily full report at noon UTC. History written on
+price/availability changes only.
 """
 
 from __future__ import annotations
@@ -37,11 +38,10 @@ BESTBUY_API_URL = "https://api.bestbuy.com/v1/products"
 BB_PRODUCTS_KEY = "crane:feed:bestbuy:products"
 BB_PRICE_KEY = "crane:feed:bestbuy:price:{product_id}"
 BB_HEARTBEAT_KEY = "crane:feed:bestbuy:heartbeat"
-BB_POLL_LOG_KEY = "crane:feed:bestbuy:poll_log"
 
-# How often to write history entries (avoid Redis bloat at 2 rps)
-HISTORY_INTERVAL = 300  # 5 minutes
-HEARTBEAT_TTL = 120  # seconds — if this expires, monitor is dead
+HEARTBEAT_INTERVAL = 30  # write heartbeat every 30s
+HEARTBEAT_TTL = 7 * 86400  # 7 days — keep full uptime history
+DAILY_REPORT_HOUR = 12  # noon UTC
 
 
 def _extract_sku_from_url(url: str) -> Optional[str]:
@@ -116,9 +116,12 @@ class BestBuyMonitor:
         self._redis = redis_client
         self.poll_interval = poll_interval
         self._api_key = os.environ.get("BESTBUY_API_KEY", "")
-        self._last_history_write: dict[str, float] = {}
+        # In-memory counters — proof of polling frequency
         self._polls_ok = 0
-        self._polls_empty = 0
+        self._polls_fail = 0
+        self._started_at = time.time()
+        self._last_heartbeat_write: float = 0
+        self._last_daily_report_date: str = ""
 
     def add_product(self, sku: str, name: str = "", target_price: float = 0.0, url: str = ""):
         """Add a product by numeric SKU to monitor."""
@@ -149,29 +152,56 @@ class BestBuyMonitor:
                 continue
         return products
 
-    def _write_heartbeat(self, sku_count: int, empty: bool = False):
-        """Write heartbeat to Redis — proves the monitor is alive."""
-        epoch = time.time()
-        now = datetime.now(timezone.utc).isoformat()
-        if empty:
-            self._polls_empty += 1
-        else:
-            self._polls_ok += 1
-            self._polls_empty = 0
+    def _maybe_write_heartbeat(self):
+        """Write heartbeat every HEARTBEAT_INTERVAL seconds (not every poll)."""
+        now = time.time()
+        if (now - self._last_heartbeat_write) < HEARTBEAT_INTERVAL:
+            return
 
-        pipe = self._redis.client.pipeline()
-        pipe.hset(BB_HEARTBEAT_KEY, mapping={
-            "last_poll_ts": now,
-            "last_poll_epoch": str(epoch),
+        uptime = now - self._started_at
+        total_polls = self._polls_ok + self._polls_fail
+        rps = total_polls / uptime if uptime > 0 else 0
+
+        self._redis.client.hset(BB_HEARTBEAT_KEY, mapping={
+            "last_poll_ts": datetime.now(timezone.utc).isoformat(),
+            "last_poll_epoch": f"{now:.3f}",
             "polls_ok": str(self._polls_ok),
-            "polls_empty": str(self._polls_empty),
-            "sku_count": str(sku_count),
+            "polls_fail": str(self._polls_fail),
+            "uptime_seconds": str(int(uptime)),
+            "effective_rps": f"{rps:.2f}",
         })
-        pipe.expire(BB_HEARTBEAT_KEY, HEARTBEAT_TTL)
-        status = "empty" if empty else "ok"
-        pipe.rpush(BB_POLL_LOG_KEY, f"{epoch:.3f}:{sku_count}:{status}")
-        pipe.ltrim(BB_POLL_LOG_KEY, -200, -1)
-        pipe.execute()
+        self._redis.client.expire(BB_HEARTBEAT_KEY, HEARTBEAT_TTL)
+        self._last_heartbeat_write = now
+
+    def _maybe_daily_report(self, results: dict[str, dict]):
+        """Send a full poll report to Slack once per day at noon UTC."""
+        utc_now = datetime.now(timezone.utc)
+        today = utc_now.strftime("%Y-%m-%d")
+
+        if today == self._last_daily_report_date:
+            return
+        if utc_now.hour != DAILY_REPORT_HOUR:
+            return
+
+        self._last_daily_report_date = today
+
+        uptime = time.time() - self._started_at
+        total = self._polls_ok + self._polls_fail
+        rps = total / uptime if uptime > 0 else 0
+        uptime_hrs = uptime / 3600
+
+        lines = [
+            f"*Daily BB Monitor Report* ({today})",
+            f"Uptime: {uptime_hrs:.1f}h | Polls: {total:,} ({rps:.2f} rps) | "
+            f"Failures: {self._polls_fail}",
+        ]
+        for sku, data in results.items():
+            price = data.get("price")
+            avail = "IN STOCK" if data.get("available") else "Sold Out"
+            price_str = f"${price:.2f}" if price else "?"
+            lines.append(f"  SKU {sku}: {price_str} — {avail}")
+
+        _slack_log("\n".join(lines))
 
     def run(self):
         """Main polling loop — runs at ~2 rps with batch queries."""
@@ -200,9 +230,12 @@ class BestBuyMonitor:
                 results = _fetch_products_batch(skus, self._api_key, client)
 
                 if not results:
-                    self._write_heartbeat(len(skus), empty=True)
+                    self._polls_fail += 1
+                    self._maybe_write_heartbeat()
                     time.sleep(5)
                     continue
+
+                self._polls_ok += 1
 
                 for product in products:
                     product_id = product["product_id"]
@@ -212,11 +245,12 @@ class BestBuyMonitor:
                         except Exception as e:
                             log.error(f"Error processing {product_id}: {e}")
 
-                self._write_heartbeat(len(skus), empty=False)
+                self._maybe_write_heartbeat()
+                self._maybe_daily_report(results)
                 time.sleep(self.poll_interval)
 
     def _process_result(self, product: dict, result: dict):
-        """Process a single product result — alert on changes, throttle history writes."""
+        """Process a single product result — only write to Redis on changes."""
         product_id = product["product_id"]
         url = product["url"]
         name = product.get("name", product_id)
@@ -225,7 +259,6 @@ class BestBuyMonitor:
         price = result["price"]
         available = result["available"]
         now = datetime.now(timezone.utc).isoformat()
-        now_ts = time.monotonic()
         cart_link = BESTBUY_CART_URL.format(sku=product_id)
 
         # Read previous state
@@ -242,28 +275,21 @@ class BestBuyMonitor:
         # Detect changes
         price_changed = price and previous_price and price != previous_price
         avail_changed = available != was_available
+        is_first = previous_price is None
 
-        # Always update current price and availability
-        if price:
-            self._redis.client.set(price_key, str(price), ex=7 * 86400)
-        self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
+        # Only write to Redis when something changed or first detection
+        if price_changed or avail_changed or is_first:
+            if price:
+                self._redis.client.set(price_key, str(price), ex=7 * 86400)
+            self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
 
-        # Write history on change or every HISTORY_INTERVAL
-        last_write = self._last_history_write.get(product_id, 0)
-        should_write_history = (
-            price_changed
-            or avail_changed
-            or (now_ts - last_write) >= HISTORY_INTERVAL
-            or previous_price is None  # first time
-        )
-        if should_write_history and price:
+            # Write history entry on every change
             history_key = f"crane:feed:bestbuy:history:{product_id}"
             self._redis.client.lpush(
                 history_key,
                 json.dumps({"price": price, "available": available, "timestamp": now}),
             )
-            self._redis.client.ltrim(history_key, 0, 499)
-            self._last_history_write[product_id] = now_ts
+            self._redis.client.ltrim(history_key, 0, 999)
 
         # Decide if we should alert
         should_alert = False
@@ -273,7 +299,7 @@ class BestBuyMonitor:
             should_alert = True
             price_str = f"${price:.2f}" if price else "unknown price"
             reason = f"[Best Buy] BACK IN STOCK! {price_str}"
-        elif price and previous_price is None:
+        elif price and is_first:
             should_alert = True
             reason = f"[Best Buy] Now tracking: ${price:.2f}"
         elif price and previous_price and price < previous_price:

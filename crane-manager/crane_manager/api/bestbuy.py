@@ -111,43 +111,24 @@ def monitor_status():
             heartbeat_age = round(time.time() - epoch, 1)
             alive = heartbeat_age < 120
 
+    def _int(key):
+        raw = heartbeat.get(key.encode(), heartbeat.get(key, b"0"))
+        return int(_decode(raw)) if raw else 0
+
+    def _str(key):
+        raw = heartbeat.get(key.encode(), heartbeat.get(key, b""))
+        return _decode(raw) if raw else None
+
     return {
         "thread_status": _decode(thread_status),
         "main_version": _decode(main_version),
         "alive": alive,
         "heartbeat_age_seconds": heartbeat_age,
-        "polls_ok": int(_decode(heartbeat.get(b"polls_ok", b"0") or heartbeat.get("polls_ok", "0"))) if heartbeat else 0,
-        "polls_empty": int(_decode(heartbeat.get(b"polls_empty", b"0") or heartbeat.get("polls_empty", "0"))) if heartbeat else 0,
-        "sku_count": int(_decode(heartbeat.get(b"sku_count", b"0") or heartbeat.get("sku_count", "0"))) if heartbeat else 0,
+        "polls_ok": _int("polls_ok") if heartbeat else 0,
+        "polls_fail": _int("polls_fail") if heartbeat else 0,
+        "uptime_seconds": _int("uptime_seconds") if heartbeat else 0,
+        "effective_rps": _str("effective_rps") if heartbeat else None,
     }
-
-
-@router.get("/gaps")
-def poll_gaps(threshold: float = 5.0):
-    """Detect gaps in the BB monitor poll log. Returns gaps > threshold seconds."""
-    rc = get_redis()
-    raw = rc.client.lrange("crane:feed:bestbuy:poll_log", 0, -1)
-    if not raw:
-        return {"gaps": [], "total_entries": 0}
-
-    entries = []
-    for item in raw:
-        text = item.decode() if isinstance(item, bytes) else item
-        parts = text.split(":")
-        if len(parts) >= 3:
-            entries.append({"epoch": float(parts[0]), "skus": int(parts[1]), "status": parts[2]})
-
-    gaps = []
-    for i in range(1, len(entries)):
-        delta = entries[i]["epoch"] - entries[i - 1]["epoch"]
-        if delta > threshold:
-            gaps.append({
-                "start": datetime.utcfromtimestamp(entries[i - 1]["epoch"]).isoformat() + "Z",
-                "end": datetime.utcfromtimestamp(entries[i]["epoch"]).isoformat() + "Z",
-                "gap_seconds": round(delta, 1),
-            })
-
-    return {"gaps": gaps, "total_entries": len(entries)}
 
 
 @router.get("/{product_id}/history")
