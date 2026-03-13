@@ -5,6 +5,9 @@ using the Best Buy Products API, and sends Slack alerts with direct cart links.
 
 Uses the official Best Buy Developer API (api.bestbuy.com) for near real-time
 pricing and availability data. Requires a BESTBUY_API_KEY env var.
+
+Polls at ~2 requests/second using batch SKU queries. Records history every
+5 minutes to avoid Redis bloat while still catching restocks instantly.
 """
 
 from __future__ import annotations
@@ -28,11 +31,14 @@ log = logging.getLogger("crane-feed.bestbuy")
 BESTBUY_CART_URL = "https://www.bestbuy.com/cart/add?skuId={sku}"
 
 # Best Buy Products API
-BESTBUY_API_URL = "https://api.bestbuy.com/v1/products/{sku}.json"
+BESTBUY_API_URL = "https://api.bestbuy.com/v1/products"
 
 # Redis key prefixes
 BB_PRODUCTS_KEY = "crane:feed:bestbuy:products"
 BB_PRICE_KEY = "crane:feed:bestbuy:price:{product_id}"
+
+# How often to write history entries (avoid Redis bloat at 2 rps)
+HISTORY_INTERVAL = 300  # 5 minutes
 
 
 def _extract_sku_from_url(url: str) -> Optional[str]:
@@ -52,66 +58,62 @@ def _extract_sku_from_url(url: str) -> Optional[str]:
     return None
 
 
-def _fetch_product_api(sku: str, api_key: str, max_retries: int = 3) -> Optional[dict]:
-    """Fetch product data from the Best Buy Products API.
+def _fetch_products_batch(skus: list[str], api_key: str, client: httpx.Client) -> dict[str, dict]:
+    """Fetch multiple products in a single API call using sku in(...) filter.
 
-    Returns dict with keys: price, available, title, condition, on_sale, regular_price
-    or None if all retries fail.
+    Returns dict mapping sku -> product data, or empty dict on failure.
     """
-    url = BESTBUY_API_URL.format(sku=sku)
+    sku_filter = ",".join(skus)
+    url = f"{BESTBUY_API_URL}(sku in({sku_filter}))"
     params = {
         "apiKey": api_key,
         "show": "sku,name,salePrice,regularPrice,onSale,orderable,inStoreAvailability,onlineAvailability,condition",
         "format": "json",
+        "pageSize": len(skus),
     }
 
-    for attempt in range(1, max_retries + 1):
-        try:
-            with httpx.Client() as client:
-                resp = client.get(url, params=params, timeout=15)
-                if resp.status_code == 404:
-                    log.warning(f"Product {sku} not found in Best Buy API (404)")
-                    return None
-                resp.raise_for_status()
-                data = resp.json()
+    try:
+        resp = client.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        log.warning(f"Best Buy batch API failed: {e}")
+        return {}
 
-            price = data.get("salePrice") or data.get("regularPrice")
-            available = (
-                data.get("onlineAvailability", False)
-                or data.get("inStoreAvailability", False)
-            )
-            orderable = data.get("orderable", "")
+    results = {}
+    for product in data.get("products", []):
+        sku = str(product.get("sku", ""))
+        price = product.get("salePrice") or product.get("regularPrice")
+        available = (
+            product.get("onlineAvailability", False)
+            or product.get("inStoreAvailability", False)
+        )
+        orderable = product.get("orderable", "")
 
-            return {
-                "price": float(price) if price else None,
-                "available": bool(available) or orderable == "Available",
-                "title": data.get("name", ""),
-                "condition": data.get("condition", ""),
-                "on_sale": data.get("onSale", False),
-                "regular_price": data.get("regularPrice"),
-            }
+        results[sku] = {
+            "price": float(price) if price else None,
+            "available": bool(available) or orderable == "Available",
+            "title": product.get("name", ""),
+            "condition": product.get("condition", ""),
+            "on_sale": product.get("onSale", False),
+            "regular_price": product.get("regularPrice"),
+        }
 
-        except httpx.HTTPStatusError as e:
-            log.warning(f"Best Buy API error (attempt {attempt}/{max_retries}): {e}")
-            time.sleep(2 * attempt)
-        except Exception as e:
-            log.warning(f"Best Buy API request failed (attempt {attempt}/{max_retries}): {e}")
-            time.sleep(2 * attempt)
-
-    return None
+    return results
 
 
 class BestBuyMonitor:
-    """Monitors specific Best Buy product URLs for price changes."""
+    """Monitors specific Best Buy product URLs for price changes at ~2 rps."""
 
     def __init__(
         self,
         redis_client: RedisClient,
-        poll_interval: float = 300.0,
+        poll_interval: float = 0.5,  # 2 requests per second
     ):
         self._redis = redis_client
         self.poll_interval = poll_interval
         self._api_key = os.environ.get("BESTBUY_API_KEY", "")
+        self._last_history_write: dict[str, float] = {}
 
     def add_product(self, sku: str, name: str = "", target_price: float = 0.0, url: str = ""):
         """Add a product by numeric SKU to monitor."""
@@ -143,81 +145,95 @@ class BestBuyMonitor:
         return products
 
     def run(self):
-        """Main polling loop."""
-        log.info("Best Buy monitor started (poll_interval=%ds)", self.poll_interval)
-
+        """Main polling loop — runs at ~2 rps with batch queries."""
         if not self._api_key:
             msg = "BESTBUY_API_KEY not set — Best Buy monitor disabled."
             log.error(msg)
             _slack_log(msg)
             return
 
-        _slack_log(f"Best Buy monitor started (API mode). Tracking {len(self.list_products())} products. Poll: {self.poll_interval}s")
+        products = self.list_products()
+        _slack_log(
+            f"Best Buy monitor started (2 rps, batch API). "
+            f"Tracking {len(products)} products."
+        )
+        log.info("Best Buy monitor started (poll_interval=%.1fs)", self.poll_interval)
 
-        while True:
-            products = self.list_products()
-            if not products:
-                log.debug("No Best Buy products to monitor")
+        # Use a persistent HTTP client for connection reuse
+        with httpx.Client(http2=False) as client:
+            while True:
+                products = self.list_products()
+                if not products:
+                    time.sleep(5)
+                    continue
+
+                skus = [p["product_id"] for p in products]
+                results = _fetch_products_batch(skus, self._api_key, client)
+
+                if not results:
+                    log.warning("Batch fetch returned no results, retrying in 5s")
+                    time.sleep(5)
+                    continue
+
+                for product in products:
+                    product_id = product["product_id"]
+                    if product_id in results:
+                        try:
+                            self._process_result(product, results[product_id])
+                        except Exception as e:
+                            log.error(f"Error processing {product_id}: {e}")
+
                 time.sleep(self.poll_interval)
-                continue
 
-            for product in products:
-                try:
-                    self._check_product(product)
-                except Exception as e:
-                    msg = f"Best Buy check failed for {product.get('product_id')}: {e}"
-                    log.error(msg)
-                    _slack_log(msg)
-                time.sleep(5)  # Small delay between API calls
-
-            time.sleep(self.poll_interval)
-
-    def _check_product(self, product: dict):
+    def _process_result(self, product: dict, result: dict):
+        """Process a single product result — alert on changes, throttle history writes."""
         product_id = product["product_id"]
         url = product["url"]
         name = product.get("name", product_id)
         target_price = product.get("target_price", 0)
 
-        log.info(f"Checking Best Buy product: {name} ({product_id})")
-
-        result = _fetch_product_api(product_id, self._api_key)
-        if result is None:
-            msg = f"Could not fetch {product_id} from API after retries"
-            log.warning(msg)
-            _slack_log(msg)
-            return
-
         price = result["price"]
         available = result["available"]
-
-        log.info(f"API response {product_id}: price=${price}, available={available}, "
-                 f"on_sale={result.get('on_sale')}")
-
         now = datetime.now(timezone.utc).isoformat()
+        now_ts = time.monotonic()
         cart_link = BESTBUY_CART_URL.format(sku=product_id)
 
+        # Read previous state
         price_key = BB_PRICE_KEY.format(product_id=product_id)
         previous_raw = self._redis.client.get(price_key)
         previous_price = float(previous_raw) if previous_raw else None
 
-        # Store current price
+        avail_key = f"crane:feed:bestbuy:avail:{product_id}"
+        prev_avail_raw = self._redis.client.get(avail_key)
+        was_available = prev_avail_raw and (
+            prev_avail_raw.decode() if isinstance(prev_avail_raw, bytes) else prev_avail_raw
+        ) == "1"
+
+        # Detect changes
+        price_changed = price and previous_price and price != previous_price
+        avail_changed = available != was_available
+
+        # Always update current price and availability
         if price:
             self._redis.client.set(price_key, str(price), ex=7 * 86400)
+        self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
 
+        # Write history on change or every HISTORY_INTERVAL
+        last_write = self._last_history_write.get(product_id, 0)
+        should_write_history = (
+            price_changed
+            or avail_changed
+            or (now_ts - last_write) >= HISTORY_INTERVAL
+            or previous_price is None  # first time
+        )
+        if should_write_history and price:
             history_key = f"crane:feed:bestbuy:history:{product_id}"
             self._redis.client.lpush(
                 history_key,
                 json.dumps({"price": price, "available": available, "timestamp": now}),
             )
             self._redis.client.ltrim(history_key, 0, 499)
-
-        # Check previous availability
-        avail_key = f"crane:feed:bestbuy:avail:{product_id}"
-        prev_avail_raw = self._redis.client.get(avail_key)
-        was_available = prev_avail_raw and (
-            prev_avail_raw.decode() if isinstance(prev_avail_raw, bytes) else prev_avail_raw
-        ) == "1"
-        self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
+            self._last_history_write[product_id] = now_ts
 
         # Decide if we should alert
         should_alert = False
@@ -252,10 +268,11 @@ class BestBuyMonitor:
                 last_seen=now,
             )
             _notify_bestbuy(listing, reason=reason, cart_link=cart_link, available=available)
-
-        status = "IN STOCK" if available else "out of stock"
-        price_str = f"${price:.2f}" if price else "unknown"
-        log.info(f"Best Buy {product_id}: {price_str}, {status}")
+            log.info(f"ALERT {product_id}: {reason}")
+        elif avail_changed or price_changed:
+            status = "IN STOCK" if available else "out of stock"
+            price_str = f"${price:.2f}" if price else "unknown"
+            log.info(f"Best Buy {product_id}: {price_str}, {status}")
 
 
 def _slack_log(message: str):
