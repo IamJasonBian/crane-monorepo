@@ -285,6 +285,10 @@ class BestBuyMonitor:
         avail_changed = available != was_available
         is_first = previous_price is None
 
+        # Check if we have history — if so, this is a redeploy, not truly first detection
+        history_key = f"crane:feed:bestbuy:history:{product_id}"
+        has_history = self._redis.client.llen(history_key) > 0
+
         # Only write to Redis when something changed or first detection
         if price_changed or avail_changed or is_first:
             if price:
@@ -292,7 +296,6 @@ class BestBuyMonitor:
             self._redis.client.set(avail_key, "1" if available else "0", ex=7 * 86400)
 
             # Write history entry on every change
-            history_key = f"crane:feed:bestbuy:history:{product_id}"
             self._redis.client.lpush(
                 history_key,
                 json.dumps({"price": price, "available": available, "timestamp": now}),
@@ -307,7 +310,7 @@ class BestBuyMonitor:
             should_alert = True
             price_str = f"${price:.2f}" if price else "unknown price"
             reason = f"[Best Buy] BACK IN STOCK! {price_str}"
-        elif price and is_first:
+        elif price and is_first and not has_history:
             should_alert = True
             reason = f"[Best Buy] Now tracking: ${price:.2f}"
         elif price and previous_price and price < previous_price:
