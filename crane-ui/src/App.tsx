@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { BarChart3, List, Target, Search } from 'lucide-react';
 
 import PricesPage from './pages/PricesPage';
@@ -32,12 +32,6 @@ function AppContent() {
             <h1 className="text-sm font-medium text-white tracking-wider">CRANE</h1>
           </Link>
           <nav className="flex items-center gap-6">
-            <NavLink to="/">
-              <span className="flex items-center gap-1.5">
-                <BarChart3 className="w-3 h-3" />
-                Prices
-              </span>
-            </NavLink>
             <NavLink to="/listings">
               <span className="flex items-center gap-1.5">
                 <List className="w-3 h-3" />
@@ -56,14 +50,21 @@ function AppContent() {
                 Targets
               </span>
             </NavLink>
+            <NavLink to="/prices">
+              <span className="flex items-center gap-1.5">
+                <BarChart3 className="w-3 h-3" />
+                Prices
+              </span>
+            </NavLink>
           </nav>
         </div>
       </header>
 
       <main>
         <Routes>
-          <Route path="/" element={<PricesPage />} />
+          <Route path="/" element={<Navigate to="/listings" replace />} />
           <Route path="/listings" element={<ListingsPage />} />
+          <Route path="/prices" element={<PricesPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/targets" element={<TargetsPage />} />
         </Routes>

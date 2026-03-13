@@ -9,6 +9,7 @@ Also captures the current latest snapshot from the market-quotes hash.
 
 Env vars required:
   REDIS_HOST (default: redis-17054.c99.us-east-1-4.ec2.cloud.redislabs.com:17054)
+  REDIS_USERNAME (default: default)
   REDIS_PASSWORD
   NETLIFY_API_TOKEN
   NETLIFY_SITE_ID
@@ -36,6 +37,7 @@ def get_redis_client():
         "redis-17054.c99.us-east-1-4.ec2.cloud.redislabs.com:17054",
     )
     password = os.getenv("REDIS_PASSWORD")
+    username = os.getenv("REDIS_USERNAME", "default")
     port = 17054
     if ":" in host:
         host, port_str = host.rsplit(":", 1)
@@ -45,7 +47,7 @@ def get_redis_client():
             pass
     try:
         return redis.Redis(
-            host=host, port=port, password=password,
+            host=host, port=port, password=password, username=username,
             decode_responses=True,
         )
     except Exception as e:

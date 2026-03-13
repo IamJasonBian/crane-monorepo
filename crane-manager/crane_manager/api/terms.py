@@ -45,6 +45,19 @@ def create_term(term: SearchTerm):
     return term
 
 
+@router.put("/{term_id}", response_model=SearchTerm)
+def update_term(term_id: str, updates: dict):
+    rc = get_redis()
+    existing = rc.get_model(f"crane:manager:terms:{term_id}", SearchTerm)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Term not found")
+    for field, value in updates.items():
+        if hasattr(existing, field) and field not in ("term_id", "created_at"):
+            setattr(existing, field, value)
+    rc.put_model(f"crane:manager:terms:{term_id}", existing)
+    return existing
+
+
 @router.delete("/{term_id}")
 def delete_term(term_id: str):
     rc = get_redis()

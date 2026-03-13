@@ -1,4 +1,4 @@
-"""Tests that the poller marks disappeared listings as sold."""
+"""Tests that the poller marks disappeared listings as has_sales."""
 
 from unittest.mock import MagicMock, patch
 
@@ -8,10 +8,10 @@ from crane_shared.events import EventBus
 from crane_feed.sources.countdown_ebay import CountdownEbayPoller
 
 
-def _make_listing(epid: str, price: float = 10.0, sold: bool = False) -> EbayListing:
+def _make_listing(epid: str, price: float = 10.0, has_sales: bool = False) -> EbayListing:
     return EbayListing(
         epid=epid, title=f"Item {epid}", price=price,
-        sold=sold, sold_at="" if not sold else "2025-01-01T00:00:00",
+        has_sales=has_sales, first_sale_at="" if not has_sales else "2025-01-01T00:00:00",
     )
 
 
@@ -22,8 +22,8 @@ def _build_poller():
     return poller, rc, bus
 
 
-def test_disappeared_listing_marked_sold():
-    """A listing present in the previous poll but missing from the current poll is marked sold."""
+def test_disappeared_listing_marked_has_sales():
+    """A listing present in the previous poll but missing from the current poll is marked has_sales."""
     poller, rc, bus = _build_poller()
     term = SearchTerm(term_id="t1", query="test gpu")
 
@@ -53,31 +53,31 @@ def test_disappeared_listing_marked_sold():
         if isinstance(model, EbayListing):
             saved[model.epid] = model
 
-    # B and C should be marked sold
-    assert saved["B"].sold is True
-    assert saved["B"].sold_at != ""
-    assert saved["C"].sold is True
-    assert saved["C"].sold_at != ""
+    # B and C should be marked has_sales
+    assert saved["B"].has_sales is True
+    assert saved["B"].first_sale_at != ""
+    assert saved["C"].has_sales is True
+    assert saved["C"].first_sale_at != ""
 
-    # A should NOT be marked sold (still active)
-    assert saved["A"].sold is False
+    # A should NOT be marked has_sales (still active)
+    assert saved["A"].has_sales is False
 
 
-def test_already_sold_not_updated_again():
-    """A listing already marked sold should not have its sold_at overwritten."""
+def test_already_has_sales_not_updated_again():
+    """A listing already marked has_sales should not have its first_sale_at overwritten."""
     poller, rc, bus = _build_poller()
     term = SearchTerm(term_id="t1", query="test gpu")
 
     rc.get_index.return_value = {"A", "B"}
 
-    # B was already sold in a previous cycle
-    already_sold = _make_listing("B", price=200, sold=True)
-    already_sold.sold_at = "2025-01-01T00:00:00"
+    # B was already has_sales in a previous cycle
+    already_has_sales = _make_listing("B", price=200, has_sales=True)
+    already_has_sales.first_sale_at = "2025-01-01T00:00:00"
 
     with patch.object(poller, "poll_once", return_value=[_make_listing("A")]):
         def fake_get_model(key, cls):
             if "B" in key:
-                return already_sold
+                return already_has_sales
             if "A" in key:
                 return _make_listing("A")
             return None
@@ -85,16 +85,16 @@ def test_already_sold_not_updated_again():
         rc.get_model.side_effect = fake_get_model
         poller._poll_term(term)
 
-    # B should NOT have been re-saved (already sold)
-    sold_saves = [
+    # B should NOT have been re-saved (already has_sales)
+    has_sales_saves = [
         c for c in rc.put_model.call_args_list
         if isinstance(c[0][1], EbayListing) and c[0][1].epid == "B"
     ]
-    assert len(sold_saves) == 0
+    assert len(has_sales_saves) == 0
 
 
-def test_no_disappearances_no_sold():
-    """When all previous listings are still present, nothing is marked sold."""
+def test_no_disappearances_no_has_sales():
+    """When all previous listings are still present, nothing is marked has_sales."""
     poller, rc, bus = _build_poller()
     term = SearchTerm(term_id="t1", query="test gpu")
 
@@ -107,14 +107,14 @@ def test_no_disappearances_no_sold():
         rc.get_model.return_value = None
         poller._poll_term(term)
 
-    # No listing should have sold=True
+    # No listing should have has_sales=True
     for call in rc.put_model.call_args_list:
         model = call[0][1]
         if isinstance(model, EbayListing):
-            assert model.sold is False
+            assert model.has_sales is False
 
 
-def test_sold_listing_gets_extended_ttl():
+def test_has_sales_listing_gets_extended_ttl():
     """Sold listings should be stored with 30-day TTL (not the default 7-day)."""
     poller, rc, bus = _build_poller()
     term = SearchTerm(term_id="t1", query="test gpu")
@@ -128,7 +128,7 @@ def test_sold_listing_gets_extended_ttl():
         )
         poller._poll_term(term)
 
-    # Find the put_model call for B (the sold item)
+    # Find the put_model call for B (the has_sales item)
     for call in rc.put_model.call_args_list:
         model = call[0][1]
         if isinstance(model, EbayListing) and model.epid == "B":

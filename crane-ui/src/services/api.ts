@@ -99,8 +99,11 @@ export async function getListings(limit?: number): Promise<EbayListing[]> {
   return get<EbayListing[]>(`/listings/${q}`);
 }
 
-export async function getListingsByTerm(query: string, limit?: number): Promise<EbayListing[]> {
-  const q = limit ? `?limit=${limit}` : '';
+export async function getListingsByTerm(query: string, opts?: { limit?: number; classifier?: boolean }): Promise<EbayListing[]> {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.classifier !== undefined) params.set('classifier', String(opts.classifier));
+  const q = params.toString() ? `?${params}` : '';
   return get<EbayListing[]>(`/listings/by-term/${encodeURIComponent(query)}${q}`);
 }
 
@@ -120,6 +123,16 @@ export async function getTerms(): Promise<SearchTerm[]> {
 
 export async function createTerm(term: SearchTerm): Promise<SearchTerm> {
   return post<SearchTerm>('/terms/', term);
+}
+
+export async function updateTerm(termId: string, updates: Partial<SearchTerm>): Promise<SearchTerm> {
+  const resp = await fetch(`${BASE}/terms/${termId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.json();
 }
 
 export async function deleteTerm(termId: string): Promise<void> {

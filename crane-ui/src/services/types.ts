@@ -123,8 +123,8 @@ export interface EbayListing {
   search_term: string;
   first_seen: string;
   last_seen: string;
-  sold: boolean;
-  sold_at: string;
+  has_sales: boolean;
+  first_sale_at: string;
 }
 
 export interface SearchTerm {
@@ -132,8 +132,8 @@ export interface SearchTerm {
   query: string;
   category: string;
   enabled: boolean;
-  threshold_price: number;
   min_price: number;
+  max_price: number;
   sort_by: string;
   listing_type: string;
   last_polled: string;

@@ -16,6 +16,8 @@ import httpx
 from crane_shared.models import EbayListing, SellerInfo, SearchTerm
 from crane_shared.redis_client import RedisClient
 from crane_shared.events import EventBus
+from crane_feed.classifier import classify_listing
+from crane_feed.notifier import notify_listing
 
 log = logging.getLogger("crane-feed.ebay")
 
@@ -128,21 +130,15 @@ class CountdownEbayPoller:
             existing = self._redis.get_model(
                 f"crane:feed:listings:{epid}", EbayListing,
             )
-            if existing and not existing.sold:
-                existing.sold = True
-                existing.sold_at = now
+            if existing and not existing.has_sales:
+                existing.has_sales = True
+                existing.first_sale_at = now
                 self._redis.put_model(
                     f"crane:feed:listings:{epid}", existing, ttl=30 * 86400,
                 )
 
         for listing in listings:
             if not listing.epid:
-                continue
-
-            # Skip listings outside price bounds
-            if term.min_price > 0 and listing.price < term.min_price:
-                continue
-            if term.threshold_price > 0 and listing.price > term.threshold_price:
                 continue
 
             # Check if we've seen this item before
@@ -165,6 +161,21 @@ class CountdownEbayPoller:
                 listing.epid,
             )
             self._redis.add_to_index("crane:feed:listings:index:all", listing.epid)
+
+            # Classify and notify
+            if classify_listing(term.query, listing.title):
+                is_new = existing is None
+                price_dropped = (
+                    existing is not None
+                    and listing.price < existing.price
+                )
+                if is_new:
+                    notify_listing(listing, reason="New T705 2TB listing")
+                elif price_dropped:
+                    notify_listing(
+                        listing,
+                        reason=f"Price drop: ${existing.price:.2f} → ${listing.price:.2f}",
+                    )
 
             # Publish event
             try:

@@ -6,6 +6,7 @@ event bus activity, and circuit breaker state.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 
 from fastapi import APIRouter
@@ -44,11 +45,35 @@ def health_check():
     # Circuit breaker state
     cb = CircuitBreaker(rc)
 
+    # Best Buy monitor liveness
+    bb_alive = False
+    bb_polls_ok = 0
+    try:
+        hb = rc.client.hgetall("crane:feed:bestbuy:heartbeat")
+        if hb:
+            epoch_raw = hb.get(b"last_poll_epoch") or hb.get("last_poll_epoch")
+            if epoch_raw:
+                bb_alive = (time.time() - float(epoch_raw)) < 120
+            polls_raw = hb.get(b"polls_ok") or hb.get("polls_ok", b"0")
+            bb_polls_ok = int(polls_raw)
+    except Exception:
+        pass
+
+    overall = "healthy"
+    if not redis_ok:
+        overall = "degraded"
+    elif not bb_alive:
+        overall = "degraded"
+
     return {
-        "status": "healthy" if redis_ok else "degraded",
+        "status": overall,
         "redis": redis_ok,
         "streams": streams,
         "circuit_breaker": cb.state(),
+        "bestbuy_monitor": {
+            "alive": bb_alive,
+            "polls_ok": bb_polls_ok,
+        },
         "timestamp": datetime.utcnow().isoformat(),
     }
 
