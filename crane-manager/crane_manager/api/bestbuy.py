@@ -26,13 +26,17 @@ class AddProductRequest(BaseModel):
 
 
 def _extract_sku(url: str) -> str | None:
-    m = re.search(r"/product/[^/]+/([A-Za-z0-9]+)(?:\?|$)", url)
-    if m:
-        return m.group(1)
     m = re.search(r"skuId=(\d+)", url)
     if m:
         return m.group(1)
     m = re.search(r"/site/[^/]+/(\d+)\.p", url)
+    if m:
+        return m.group(1)
+    m = re.search(r"/(\d+)\.p", url)
+    if m:
+        return m.group(1)
+    # Numeric-only path segment (e.g. bestbuy.com/site/6451686.p)
+    m = re.search(r"/(\d{5,})(?:\?|$)", url)
     if m:
         return m.group(1)
     return None
@@ -83,6 +87,18 @@ def remove_product(product_id: str):
     if not removed:
         raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
     return {"status": "removed", "product_id": product_id}
+
+
+@router.get("/status")
+def monitor_status():
+    """Get Best Buy monitor thread status from Redis."""
+    rc = get_redis()
+    thread_status = rc.client.get("crane:feed:bestbuy:thread_status")
+    main_version = rc.client.get("crane:feed:main_version")
+    return {
+        "thread_status": thread_status.decode() if isinstance(thread_status, bytes) else thread_status,
+        "main_version": main_version.decode() if isinstance(main_version, bytes) else main_version,
+    }
 
 
 @router.get("/{product_id}/history")
