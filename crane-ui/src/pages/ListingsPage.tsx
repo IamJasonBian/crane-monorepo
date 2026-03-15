@@ -11,6 +11,7 @@ export default function ListingsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [classifierOn, setClassifierOn] = useState(true);
+  const [exactMatchOn, setExactMatchOn] = useState(false);
 
   useEffect(() => {
     getTerms()
@@ -18,14 +19,15 @@ export default function ListingsPage() {
       .catch(() => {});
   }, []);
 
-  const handleSearch = async (query: string, classifier?: boolean) => {
+  const handleSearch = async (query: string, overrides?: { classifier?: boolean; exact_title_match?: boolean }) => {
     if (!query) return;
     setActiveTerm(query);
     setLoading(true);
     setError(null);
-    const isClassifierOn = classifier !== undefined ? classifier : classifierOn;
+    const isClassifierOn = overrides?.classifier !== undefined ? overrides.classifier : classifierOn;
+    const isExactMatchOn = overrides?.exact_title_match !== undefined ? overrides.exact_title_match : exactMatchOn;
     try {
-      const data = await getListingsByTerm(query, { classifier: isClassifierOn });
+      const data = await getListingsByTerm(query, { classifier: isClassifierOn, exact_title_match: isExactMatchOn });
       setListings(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch listings');
@@ -73,7 +75,7 @@ export default function ListingsPage() {
             onClick={() => {
               const next = !classifierOn;
               setClassifierOn(next);
-              if (activeTerm) handleSearch(activeTerm, next);
+              if (activeTerm) handleSearch(activeTerm, { classifier: next });
             }}
             className={`px-2 py-0.5 text-[10px] border transition-colors ${
               classifierOn
@@ -81,7 +83,21 @@ export default function ListingsPage() {
                 : 'bg-[#331a1a] text-[#f66] border-[#442222]'
             }`}
           >
-            classifier {classifierOn ? 'on' : 'off'}
+            catalog {classifierOn ? 'on' : 'off'}
+          </button>
+          <button
+            onClick={() => {
+              const next = !exactMatchOn;
+              setExactMatchOn(next);
+              if (activeTerm) handleSearch(activeTerm, { exact_title_match: next });
+            }}
+            className={`px-2 py-0.5 text-[10px] border transition-colors ${
+              exactMatchOn
+                ? 'bg-[#1a331a] text-[#4a4] border-[#224422]'
+                : 'bg-[#331a1a] text-[#f66] border-[#442222]'
+            }`}
+          >
+            exact_title_match {exactMatchOn ? 'on' : 'off'}
           </button>
         </div>
       )}
