@@ -157,8 +157,57 @@ def is_32gb_ddr5_6000(title: str) -> bool:
     return True
 
 
-# Registry of classifiers keyed by search term query
-CLASSIFIERS: dict[str, callable] = {
+# ── Exact title match classifier ─────────────────────────────────────────
+
+# eBay UI noise that gets scraped as listing titles
+_EBAY_NOISE = [
+    "have one to sell",
+    "sell one like this",
+    "sell something else",
+    "similar items",
+    "see all",
+    "shop with confidence",
+    "returns accepted",
+    "money back guarantee",
+]
+
+# UUIDs / garbage pattern
+_UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+
+
+def exact_title_match_classifier(query: str, title: str) -> bool:
+    """Return True only if every keyword in the query appears in the title.
+
+    Also rejects eBay UI noise (e.g. "Have one to sell?") and UUID garbage.
+    """
+    t = title.lower().strip()
+
+    # Reject eBay UI noise
+    for noise in _EBAY_NOISE:
+        if t.startswith(noise):
+            return False
+
+    # Reject UUID-heavy garbage titles
+    if _UUID_RE.search(title):
+        return False
+
+    # Reject very short titles (likely UI artifacts)
+    if len(t) < 10:
+        return False
+
+    # Every word in the query must appear in the title
+    query_words = query.lower().split()
+    for word in query_words:
+        if word not in t:
+            return False
+
+    return True
+
+
+# ── Catalog classifier (product-specific rules) ─────────────────────────
+
+# Registry of catalog classifiers keyed by search term query
+CATALOG_CLASSIFIERS: dict[str, callable] = {
     "Crucial t705 2tb": is_crucial_t705_2tb,
     "crucial t705 2tb": is_crucial_t705_2tb,
     "Samsung 990 pro 2tb ssd": is_samsung_990_pro_2tb,
@@ -167,13 +216,17 @@ CLASSIFIERS: dict[str, callable] = {
 }
 
 
-def classify_listing(query: str, title: str) -> bool:
+def catalog_classifier(query: str, title: str) -> bool:
     """Check if a listing title matches the intended product for a search query.
 
     Returns True if the listing passes classification (is the real product),
     or True if no classifier exists for the query (passthrough).
     """
-    classifier = CLASSIFIERS.get(query)
+    classifier = CATALOG_CLASSIFIERS.get(query)
     if classifier is None:
         return True  # no classifier = allow all
     return classifier(title)
+
+
+# Backwards compat alias
+classify_listing = catalog_classifier

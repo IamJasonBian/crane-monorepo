@@ -1,5 +1,21 @@
 """Re-export classifier from crane-shared for backward compatibility."""
 
-from crane_shared.classifier import classify_listing, is_crucial_t705_2tb, CLASSIFIERS
+from crane_shared.classifier import (
+    classify_listing,
+    catalog_classifier,
+    exact_title_match_classifier,
+    is_crucial_t705_2tb,
+    CATALOG_CLASSIFIERS,
+)
 
-__all__ = ["classify_listing", "is_crucial_t705_2tb", "CLASSIFIERS"]
+# Backwards compat
+CLASSIFIERS = CATALOG_CLASSIFIERS
+
+__all__ = [
+    "classify_listing",
+    "catalog_classifier",
+    "exact_title_match_classifier",
+    "is_crucial_t705_2tb",
+    "CATALOG_CLASSIFIERS",
+    "CLASSIFIERS",
+]
