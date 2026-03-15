@@ -71,10 +71,99 @@ def is_crucial_t705_2tb(title: str) -> bool:
     return True
 
 
+def is_samsung_990_pro_2tb(title: str) -> bool:
+    """Return True if the listing is genuinely a Samsung 990 Pro 2TB SSD.
+
+    Rejects:
+    - Wrong capacity (1TB, 500GB, 4TB)
+    - Multi-variant listings
+    - Accessories / heatsink-only listings
+    - Other Samsung models (980, 970, 960, 950, 870, 860)
+    - Other brands
+    """
+    t = title.lower()
+
+    # Must contain "990" and "pro"
+    if "990" not in t or "pro" not in t:
+        return False
+
+    # Must contain "samsung"
+    if "samsung" not in t:
+        return False
+
+    # Must be 2TB capacity
+    if not re.search(r"2\s*tb", t):
+        return False
+
+    # Reject multi-variant listings (more than one capacity mentioned)
+    capacity_matches = re.findall(r"(?<!\d)\d{1,2}\s*tb(?!\w)", t)
+    if len(capacity_matches) > 1:
+        return False
+
+    # Reject heatsink-only / accessory listings
+    accessory_patterns = [
+        r"heatsink\s+only",
+        r"heat\s*sink\s+for",
+        r"cooler\s+for",
+        r"replacement\s+heatsink",
+    ]
+    for pat in accessory_patterns:
+        if re.search(pat, t):
+            return False
+
+    return True
+
+
+def is_32gb_ddr5_6000(title: str) -> bool:
+    """Return True if the listing is genuinely 32GB DDR5-6000 memory.
+
+    Requires all three keywords: 32GB, DDR5, and 6000 speed.
+    Rejects:
+    - Wrong capacity (16GB, 64GB, 8GB)
+    - Multi-capacity listings
+    - Wrong speed without 6000
+    - Non-RAM accessories (coolers, etc.)
+    """
+    t = title.lower()
+
+    # Must contain "32gb" or "32 gb"
+    if not re.search(r"32\s*gb", t):
+        return False
+
+    # Must contain "ddr5"
+    if "ddr5" not in t:
+        return False
+
+    # Must contain "6000" (speed rating)
+    if "6000" not in t:
+        return False
+
+    # Reject multi-capacity listings (e.g. "16GB 32GB 64GB")
+    # Ignore "2x16GB" or "4x8GB" kit descriptions — only match standalone capacities
+    capacity_matches = re.findall(r"(?<!\dx)(?<!\d)(?:8|16|32|48|64|128)\s*gb(?!\w)", t)
+    if len(capacity_matches) > 1:
+        return False
+
+    # Reject accessory-only listings
+    accessory_patterns = [
+        r"cooler\s+for",
+        r"fan\s+for",
+        r"compatible\s+with",
+    ]
+    for pat in accessory_patterns:
+        if re.search(pat, t):
+            return False
+
+    return True
+
+
 # Registry of classifiers keyed by search term query
 CLASSIFIERS: dict[str, callable] = {
     "Crucial t705 2tb": is_crucial_t705_2tb,
     "crucial t705 2tb": is_crucial_t705_2tb,
+    "Samsung 990 pro 2tb ssd": is_samsung_990_pro_2tb,
+    "samsung 990 pro 2tb ssd": is_samsung_990_pro_2tb,
+    "32gb ddr5 6000": is_32gb_ddr5_6000,
 }
 
 
