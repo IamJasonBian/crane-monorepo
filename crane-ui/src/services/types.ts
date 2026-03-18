@@ -140,3 +140,48 @@ export interface SearchTerm {
   result_count: number;
   created_at: string;
 }
+
+// ── Order Events (from allocation-engine-2.0 S3 store) ───────────────
+
+export interface OrderEvent {
+  id: string;
+  symbol: string;
+  side: string;
+  order_type: string;
+  asset_type: 'equity' | 'option';
+  trigger: string;
+  state: string;
+  quantity: number;
+  filled_quantity: number;
+  limit_price: number | null;
+  stop_price: number | null;
+  price: number | null;
+  created_at: string;
+  updated_at: string;
+  legs?: Array<{
+    side: string;
+    position_effect: string;
+    quantity: number;
+    strike: number;
+    expiration: string;
+    option_type: string;
+    chain_symbol: string;
+  }> | null;
+  direction?: string | null;
+  opening_strategy?: string | null;
+  premium?: number | null;
+  processed_premium?: number | null;
+  _synced_at?: string;
+}
+
+export interface OrderEventsResponse {
+  date: string | null;
+  asset_type: string | null;
+  count: number;
+  events: OrderEvent[];
+}
+
+export interface EventDatesResponse {
+  dates: string[];
+  count: number;
+}
