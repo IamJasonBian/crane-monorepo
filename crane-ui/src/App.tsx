@@ -1,10 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
-import { BarChart3, List, Target, Search } from 'lucide-react';
+import { BarChart3, List, Target, Search, Activity } from 'lucide-react';
 
 import PricesPage from './pages/PricesPage';
 import ListingsPage from './pages/ListingsPage';
 import TermsPage from './pages/TermsPage';
 import TargetsPage from './pages/TargetsPage';
+import EventsPage from './pages/EventsPage';
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const location = useLocation();
@@ -50,6 +51,12 @@ function AppContent() {
                 Targets
               </span>
             </NavLink>
+            <NavLink to="/events">
+              <span className="flex items-center gap-1.5">
+                <Activity className="w-3 h-3" />
+                Events
+              </span>
+            </NavLink>
             <NavLink to="/prices">
               <span className="flex items-center gap-1.5">
                 <BarChart3 className="w-3 h-3" />
@@ -67,6 +74,7 @@ function AppContent() {
           <Route path="/prices" element={<PricesPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/targets" element={<TargetsPage />} />
+          <Route path="/events" element={<EventsPage />} />
         </Routes>
       </main>
     </div>

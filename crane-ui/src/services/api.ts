@@ -138,3 +138,34 @@ export async function updateTerm(termId: string, updates: Partial<SearchTerm>): 
 export async function deleteTerm(termId: string): Promise<void> {
   return del(`/terms/${termId}`);
 }
+
+// ── Order Events (allocation-engine-2.0) ──────────────────────────────
+
+const ENGINE_API = import.meta.env.VITE_ENGINE_API_URL || 'https://allocation-engine-api.onrender.com/api';
+
+async function engineGet<T>(path: string): Promise<T> {
+  const resp = await fetch(`${ENGINE_API}${path}`);
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.json();
+}
+
+export async function getOrderEvents(date?: string, assetType?: string): Promise<import('./types').OrderEventsResponse> {
+  const params = new URLSearchParams();
+  if (assetType) params.set('asset_type', assetType);
+  const q = params.toString() ? `?${params}` : '';
+  const path = date ? `/events/${date}${q}` : `/events${q}`;
+  return engineGet(path);
+}
+
+export async function getEventDates(days?: number): Promise<import('./types').EventDatesResponse> {
+  const q = days ? `?days=${days}` : '';
+  return engineGet(`/events/dates${q}`);
+}
+
+export async function getEngineSnapshot(): Promise<Record<string, unknown>> {
+  return engineGet('/snapshot');
+}
+
+export async function getEngineStatus(): Promise<Record<string, unknown>> {
+  return engineGet('/engine/status');
+}
