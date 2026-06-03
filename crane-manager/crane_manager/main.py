@@ -23,6 +23,7 @@ from crane_manager.api.orders import router as orders_router
 from crane_manager.api.terms import router as terms_router
 from crane_manager.api.listings import router as listings_router
 from crane_manager.api.bestbuy import router as bestbuy_router
+from crane_manager.api.parsers import build_parsers_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 log = logging.getLogger("crane-manager")
@@ -58,6 +59,7 @@ app.include_router(orders_router, prefix="/api/orders", tags=["orders"])
 app.include_router(terms_router, prefix="/api/terms", tags=["terms"])
 app.include_router(listings_router, prefix="/api/listings", tags=["listings"])
 app.include_router(bestbuy_router, prefix="/api/bestbuy", tags=["bestbuy"])
+app.include_router(build_parsers_router(), prefix="/api/parsers", tags=["parsers"])
 
 
 @app.get("/")
