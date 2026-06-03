@@ -32,11 +32,14 @@ app = FastAPI(title="Crane Manager", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
+    # Allowed browser origins. This API is deployed from the `main` branch to
+    # crane-manager-gamma.onrender.com (canonical host — crane.onrender.com is
+    # taken on Render's shared namespace, so this URL is permanent).
     allow_origins=[
-        "http://localhost:5173",
-        "https://crane-manager-gamma.onrender.com",
-        "https://crane-ui-gamma.onrender.com",
-        "https://crane-ui-gamma.netlify.app",
+        "http://localhost:5173",                     # local Vite dev server
+        "https://crane-manager-gamma.onrender.com",  # API host (main deploy)
+        "https://crane-ui-gamma.onrender.com",        # production UI
+        "https://crane-ui-gamma.netlify.app",         # UI (Netlify mirror)
     ],
     allow_methods=["*"],
     allow_headers=["*"],

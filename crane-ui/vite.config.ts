@@ -12,6 +12,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Dev only: forward /api/* to the main-deployed crane-manager API.
+      // Production builds hit VITE_API_URL instead (see src/services/api.ts).
       '/api': {
         target: 'https://crane-manager-gamma.onrender.com',
         changeOrigin: true,
