@@ -19,11 +19,11 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_catalog_lists_the_two_parsers():
+def test_catalog_lists_registered_parsers():
     resp = client().get("/api/parsers/")
     assert resp.status_code == 200
     names = {p["name"] for p in resp.json()}
-    assert names == {"email", "regex"}
+    assert names == {"email", "regex", "imap"}
 
 
 def test_parser_info_and_unknown_404():
@@ -94,3 +94,53 @@ def test_parser_crash_is_contained_as_scoped_500(monkeypatch):
     # other parsers still work on the same host
     ok = client().post("/api/parsers/regex/parse", json={"pattern": "a", "text": "aaa"})
     assert ok.status_code == 200
+
+
+# --- imap proxy parser ---
+
+class _FakeResp:
+    def __init__(self, body: bytes):
+        self._body = body
+    def read(self):
+        return self._body
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        return False
+
+
+def test_imap_proxy_mounts_and_reports_unconfigured(monkeypatch):
+    monkeypatch.delenv("PARSER_IMAP_UPSTREAM_URL", raising=False)
+    c = client()
+    assert c.get("/api/parsers/imap/info").status_code == 200  # route exists w/o upstream
+    resp = c.post("/api/parsers/imap/parse", json={"q": "x"})
+    assert resp.status_code == 422
+    assert "not configured" in str(resp.json()["detail"]).lower()
+
+
+def test_imap_proxy_forwards_to_upstream(monkeypatch):
+    import urllib.request
+    monkeypatch.setenv("PARSER_IMAP_UPSTREAM_URL", "http://upstream.local")
+    captured = {}
+    def fake_urlopen(req, timeout=None):
+        captured["url"] = req.full_url
+        captured["body"] = req.data
+        return _FakeResp(b'{"crawled": 3, "ok": true}')
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    resp = client().post("/api/parsers/imap/parse", json={"folder": "INBOX"})
+    assert resp.status_code == 200
+    assert resp.json()["result"] == {"crawled": 3, "ok": True}
+    assert captured["url"] == "http://upstream.local/parse"
+    assert b"INBOX" in captured["body"]
+
+
+def test_imap_proxy_maps_upstream_error(monkeypatch):
+    import urllib.request, urllib.error, io
+    monkeypatch.setenv("PARSER_IMAP_UPSTREAM_URL", "http://upstream.local")
+    def boom(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 502, "Bad Gateway", {}, io.BytesIO(b"down"))
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    resp = client().post("/api/parsers/imap/parse", json={})
+    assert resp.status_code == 422
+    assert "502" in str(resp.json()["detail"])
