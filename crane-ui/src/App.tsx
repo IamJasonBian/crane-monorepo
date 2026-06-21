@@ -1,10 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
-import { BarChart3, List, Target, Search } from 'lucide-react';
+import { BarChart3, List, Target, Search, GitCompare } from 'lucide-react';
 
 import PricesPage from './pages/PricesPage';
 import ListingsPage from './pages/ListingsPage';
 import TermsPage from './pages/TermsPage';
 import TargetsPage from './pages/TargetsPage';
+import ComparisonPage from './pages/ComparisonPage';
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const location = useLocation();
@@ -56,6 +57,12 @@ function AppContent() {
                 Prices
               </span>
             </NavLink>
+            <NavLink to="/compare">
+              <span className="flex items-center gap-1.5">
+                <GitCompare className="w-3 h-3" />
+                Compare
+              </span>
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -67,6 +74,7 @@ function AppContent() {
           <Route path="/prices" element={<PricesPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/targets" element={<TargetsPage />} />
+          <Route path="/compare" element={<ComparisonPage />} />
         </Routes>
       </main>
     </div>

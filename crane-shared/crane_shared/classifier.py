@@ -204,6 +204,145 @@ def exact_title_match_classifier(query: str, title: str) -> bool:
     return True
 
 
+def is_hp_elitebook(title: str) -> bool:
+    """Return True if the listing is genuinely an HP Elitebook laptop.
+
+    Rejects:
+    - Non-HP brands mentioning "elite"
+    - Accessories, docks, adapters, batteries, chargers, screens
+    - Non-Elitebook HP models (Pavilion, Spectre, Omen, ProBook, ZBook standalone)
+    """
+    t = title.lower()
+
+    if "elitebook" not in t:
+        return False
+
+    if "hp" not in t:
+        return False
+
+    # Reject accessories and peripherals
+    accessory_patterns = [
+        r"\bdock(?:ing)?\b",
+        r"\badapter\b",
+        r"\bcharger\b",
+        r"\bbattery\b",
+        r"\bscreen\s+protector\b",
+        r"\bkeyboard\s+cover\b",
+        r"\bskin\b",
+        r"\bcase\s+for\b",
+        r"\bcover\s+for\b",
+        r"\bbag\s+for\b",
+        r"\bram\s+for\b",
+        r"\bssd\s+for\b",
+        r"\bupgrade\s+for\b",
+        r"\bcompatible\s+with\b",
+    ]
+    for pat in accessory_patterns:
+        if re.search(pat, t):
+            return False
+
+    return True
+
+
+def is_hp_elitebook_high_refresh(title: str) -> bool:
+    """Return True if the listing is an HP Elitebook with 120Hz or higher refresh rate.
+
+    Accepts 120Hz, 144Hz, 165Hz, 240Hz, and similar high-refresh panels.
+    """
+    t = title.lower()
+
+    if not is_hp_elitebook(t):
+        return False
+
+    # Match explicit Hz refresh rate: 120hz, 144hz, 165hz, 240hz, etc.
+    if re.search(r"(?:1[2-9]\d|2\d{2})\s*hz", t):
+        return True
+
+    # Match "120" or "144" standalone near "hz" or "refresh" context
+    if re.search(r"\b(?:120|144|165|240)\s*(?:hz|hertz|refresh)\b", t):
+        return True
+
+    return False
+
+
+def is_wireless_mouse(title: str) -> bool:
+    """Return True if the listing is a standalone wireless mouse.
+
+    Rejects:
+    - Wired mice
+    - Mouse pads, dongles, receivers (accessory-only listings)
+    - Combo packs that are primarily something else
+    - Gaming chairs, desks mentioning "mouse" tangentially
+    """
+    t = title.lower()
+
+    # Must mention mouse (or mice)
+    if not re.search(r"\b(?:mouse|mice)\b", t):
+        return False
+
+    # Must be wireless
+    wireless_terms = ["wireless", "bluetooth", "2.4g", "2.4ghz", "cordless", "rf"]
+    if not any(term in t for term in wireless_terms):
+        return False
+
+    # Reject wired signals even if "wireless" appears in title
+    if re.search(r"\bwired\b", t) and not re.search(r"\bwireless\b", t):
+        return False
+
+    # Reject accessory-only listings
+    accessory_patterns = [
+        r"\bdongle\s+only\b",
+        r"\breceiver\s+only\b",
+        r"\bmouse\s*pad\b",
+        r"\bpad\s+for\b",
+    ]
+    for pat in accessory_patterns:
+        if re.search(pat, t):
+            return False
+
+    return True
+
+
+def is_a30_chip(title: str) -> bool:
+    """Return True if the listing is an A30 chip/processor (AMD or compatible).
+
+    Covers AMD A30 APUs, AMD Athlon A30xx series, and similar A30-designation chips.
+    Rejects:
+    - Systems/laptops that happen to contain A30 (we want standalone chips)
+    - Accessories, coolers, thermal paste
+    - Unrelated products mentioning A30 as a model suffix
+    """
+    t = title.lower()
+
+    # Must match A30 designation
+    if not re.search(r"\ba30\b", t):
+        return False
+
+    # Chip/processor keywords
+    chip_terms = ["processor", "cpu", "apu", "chip", "ryzen", "athlon", "intel", "snapdragon"]
+    has_chip_keyword = any(term in t for term in chip_terms)
+
+    # Alternatively, explicit processor category signals
+    has_processor_signal = re.search(r"\b(?:oem|tray|box(?:ed)?)\b", t) is not None
+
+    if not has_chip_keyword and not has_processor_signal:
+        return False
+
+    # Reject cooler/thermal accessories
+    accessory_patterns = [
+        r"\bcooler\b",
+        r"\bheatsink\b",
+        r"\bthermal\s*paste\b",
+        r"\bfan\s+for\b",
+        r"\bcompatible\s+with\b",
+    ]
+    for pat in accessory_patterns:
+        if re.search(pat, t):
+            return False
+
+    return True
+
+
 # ── Catalog classifier (product-specific rules) ─────────────────────────
 
 # Registry of catalog classifiers keyed by search term query
@@ -213,6 +352,28 @@ CATALOG_CLASSIFIERS: dict[str, callable] = {
     "Samsung 990 pro 2tb ssd": is_samsung_990_pro_2tb,
     "samsung 990 pro 2tb ssd": is_samsung_990_pro_2tb,
     "32gb ddr5 6000": is_32gb_ddr5_6000,
+    # Elitebook laptops
+    "hp elitebook": is_hp_elitebook,
+    "HP Elitebook": is_hp_elitebook,
+    "hp elitebook laptop": is_hp_elitebook,
+    "HP Elitebook laptop": is_hp_elitebook,
+    "hp elitebook 120hz": is_hp_elitebook_high_refresh,
+    "hp elitebook 144hz": is_hp_elitebook_high_refresh,
+    "hp elitebook high refresh": is_hp_elitebook_high_refresh,
+    "HP Elitebook 120hz": is_hp_elitebook_high_refresh,
+    "HP Elitebook 144hz": is_hp_elitebook_high_refresh,
+    # Wireless mice
+    "wireless mouse": is_wireless_mouse,
+    "Wireless mouse": is_wireless_mouse,
+    "wireless gaming mouse": is_wireless_mouse,
+    "bluetooth mouse": is_wireless_mouse,
+    # A30 chips
+    "a30 chip": is_a30_chip,
+    "A30 chip": is_a30_chip,
+    "amd a30": is_a30_chip,
+    "AMD A30": is_a30_chip,
+    "a30 processor": is_a30_chip,
+    "A30 processor": is_a30_chip,
 }
 
 
