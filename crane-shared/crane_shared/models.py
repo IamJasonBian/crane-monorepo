@@ -326,3 +326,48 @@ class SearchTerm(BaseModel):
     last_polled: str = ""
     result_count: int = 0
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
+# ---------------------------------------------------------------------------
+# Historical price tracking (crane-feed → Redis → crane-manager → /compare)
+# ---------------------------------------------------------------------------
+
+
+class PriceSnapshot(BaseModel):
+    """One aggregated price observation for a product on a given day.
+
+    The PriceSnapshotter rolls the churning stream of individual listings into
+    a single durable point per (term, source, day). Sample_count carries how
+    many listings backed the point so the UI can fade low-confidence data.
+    """
+
+    term_id: str
+    source: str = "ebay"  # ebay | bestbuy | slickdeals | ...
+    date: str = ""  # YYYY-MM-DD (UTC) — one point per source per day
+    low: float = 0.0
+    median: float = 0.0
+    high: float = 0.0
+    sample_count: int = 0
+    currency: str = "USD"
+
+
+class BomLine(BaseModel):
+    """One line of a bill of materials — an existing SearchTerm at some qty."""
+
+    role: str  # chassis | gpu | dram | nvme | nic | ...
+    term_id: str
+    qty: int = 1
+
+
+class BomSpec(BaseModel):
+    """A physical chassis plus the components that populate it.
+
+    The chassis is the anchor priced most prominently on /compare; the other
+    lines sum into a whole-build cost tracked over time.
+    """
+
+    bom_id: str
+    name: str
+    chassis_term_id: str
+    lines: list[BomLine] = Field(default_factory=list)
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())

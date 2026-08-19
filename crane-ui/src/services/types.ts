@@ -140,3 +140,53 @@ export interface SearchTerm {
   result_count: number;
   created_at: string;
 }
+
+// ── Historical prices / BOM comparison ─────────────────────────────────
+
+export interface PriceSnapshot {
+  term_id: string;
+  source: string;
+  date: string; // YYYY-MM-DD
+  low: number;
+  median: number;
+  high: number;
+  sample_count: number;
+  currency: string;
+}
+
+export interface BomLine {
+  role: string;
+  term_id: string;
+  qty: number;
+}
+
+export interface BomSpec {
+  bom_id: string;
+  name: string;
+  chassis_term_id: string;
+  lines: BomLine[];
+  created_at: string;
+}
+
+export interface BomLineHistory {
+  role: string;
+  term_id: string;
+  label: string;
+  qty: number;
+  series: PriceSnapshot[];
+}
+
+export interface BomTotalPoint {
+  date: string;
+  total: number;
+  complete: boolean;
+}
+
+export interface BomHistory {
+  bom_id: string;
+  name: string;
+  chassis_term_id: string;
+  chassis: PriceSnapshot[];
+  lines: BomLineHistory[];
+  total: BomTotalPoint[];
+}

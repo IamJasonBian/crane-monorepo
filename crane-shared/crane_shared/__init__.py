@@ -17,6 +17,9 @@ from crane_shared.models import (
     EbayListing,
     SellerInfo,
     SearchTerm,
+    PriceSnapshot,
+    BomLine,
+    BomSpec,
 )
 from crane_shared.redis_client import RedisClient
 from crane_shared.events import Event, EventBus
@@ -38,6 +41,9 @@ __all__ = [
     "EbayListing",
     "SellerInfo",
     "SearchTerm",
+    "PriceSnapshot",
+    "BomLine",
+    "BomSpec",
     "RedisClient",
     "Event",
     "EventBus",
