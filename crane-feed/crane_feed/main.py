@@ -38,10 +38,24 @@ def main():
     countdown_poller = CountdownEbayPoller(redis_client, event_bus)
 
     # Seed terms if none exist
-    if not countdown_poller._load_search_terms():
+    terms = countdown_poller._load_search_terms()
+    if not terms:
         log.info("No search terms found, seeding defaults...")
         from crane_feed.seed import seed_terms
         seed_terms(redis_client)
+    else:
+        # Existing deploy — add only missing defaults (chassis + BOMs).
+        from crane_feed.seed import ensure_defaults
+        ensure_defaults(redis_client)
+    terms = countdown_poller._load_search_terms()
+
+    # Backfill historical price points from existing per-listing history so the
+    # /compare charts aren't empty on first deploy. Idempotent (HSETNX gaps only).
+    try:
+        from crane_feed.sources.price_snapshotter import PriceSnapshotter
+        PriceSnapshotter(redis_client).backfill_all(terms)
+    except Exception as e:
+        log.error(f"Historical backfill failed: {e}")
 
     # Start Slickdeals poller in background (free, covers Best Buy/Amazon/Newegg)
     sd_poller = SlickdealsPoller(redis_client, event_bus, poll_interval=900)

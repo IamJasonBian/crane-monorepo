@@ -12,7 +12,7 @@ import os
 import sys
 
 from crane_shared import RedisClient, EventBus
-from crane_shared.models import SearchTerm
+from crane_shared.models import SearchTerm, BomSpec, BomLine
 from crane_feed.sources.countdown_ebay import CountdownEbayPoller
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
@@ -42,6 +42,26 @@ SEED_TERMS = [
     SearchTerm(term_id="samsung-990-pro-2tb", query="Samsung 990 pro 2tb ssd", category="storage", max_price=0, min_price=150),
     # DRAM (consumer)
     SearchTerm(term_id="ddr5-32gb-6000", query="32gb ddr5 6000", category="dram", max_price=0, min_price=160),
+    # Chassis — the physical datacenter tower (anchor of the /compare page)
+    SearchTerm(term_id="datacenter-tower", query="dell poweredge tower server", category="chassis", min_price=200, max_price=2000),
+]
+
+# The chassis + the components that populate it. Each line reuses a SearchTerm
+# above, so the whole-build cost is priced from the same historical series that
+# drives every other product on /compare.
+DEFAULT_BOMS = [
+    BomSpec(
+        bom_id="datacenter-tower-build",
+        name="Datacenter Tower Build",
+        chassis_term_id="datacenter-tower",
+        lines=[
+            BomLine(role="chassis", term_id="datacenter-tower", qty=1),
+            BomLine(role="gpu", term_id="nvidia-a30", qty=2),
+            BomLine(role="dram", term_id="ddr5-ecc", qty=8),
+            BomLine(role="nvme", term_id="samsung-990-pro-2tb", qty=2),
+            BomLine(role="nic", term_id="mellanox-cx6", qty=1),
+        ],
+    ),
 ]
 
 
@@ -52,6 +72,37 @@ def seed_terms(redis_client: RedisClient):
         redis_client.add_to_index("crane:manager:terms:index", term.term_id)
         log.info(f"Seeded: {term.term_id} -> '{term.query}'")
     log.info(f"Seeded {len(SEED_TERMS)} search terms")
+    seed_boms(redis_client)
+
+
+def seed_boms(redis_client: RedisClient):
+    """Write default bill-of-materials specs (chassis + components)."""
+    for bom in DEFAULT_BOMS:
+        redis_client.put_model(f"crane:manager:boms:{bom.bom_id}", bom)
+        redis_client.add_to_index("crane:manager:boms:index", bom.bom_id)
+        log.info(f"Seeded BOM: {bom.bom_id} -> '{bom.name}'")
+    log.info(f"Seeded {len(DEFAULT_BOMS)} BOMs")
+
+
+def ensure_defaults(redis_client: RedisClient):
+    """Idempotently add the chassis term + default BOMs to an existing deploy.
+
+    Runs on every boot: existing (possibly user-edited) terms are left alone,
+    but any missing chassis/BOM defaults are added so /compare has an anchor.
+    """
+    existing = redis_client.get_index("crane:manager:terms:index")
+    for term in SEED_TERMS:
+        if term.term_id not in existing:
+            redis_client.put_model(f"crane:manager:terms:{term.term_id}", term)
+            redis_client.add_to_index("crane:manager:terms:index", term.term_id)
+            log.info(f"Added missing term: {term.term_id} -> '{term.query}'")
+
+    existing_boms = redis_client.get_index("crane:manager:boms:index")
+    for bom in DEFAULT_BOMS:
+        if bom.bom_id not in existing_boms:
+            redis_client.put_model(f"crane:manager:boms:{bom.bom_id}", bom)
+            redis_client.add_to_index("crane:manager:boms:index", bom.bom_id)
+            log.info(f"Added missing BOM: {bom.bom_id} -> '{bom.name}'")
 
 
 def poll_all(redis_client: RedisClient, event_bus: EventBus):

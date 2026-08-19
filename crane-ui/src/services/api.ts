@@ -9,6 +9,9 @@ import type {
   FeedHealth,
   EbayListing,
   SearchTerm,
+  PriceSnapshot,
+  BomSpec,
+  BomHistory,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -138,4 +141,18 @@ export async function updateTerm(termId: string, updates: Partial<SearchTerm>): 
 
 export async function deleteTerm(termId: string): Promise<void> {
   return del(`/terms/${termId}`);
+}
+
+// ── Historical prices / BOM comparison ─────────────────────────────────
+
+export async function getPriceSnapshots(termId: string, source = 'ebay'): Promise<PriceSnapshot[]> {
+  return get<PriceSnapshot[]>(`/prices/history/${encodeURIComponent(termId)}?source=${source}`);
+}
+
+export async function getBoms(): Promise<BomSpec[]> {
+  return get<BomSpec[]>('/compare/boms');
+}
+
+export async function getBomHistory(bomId: string, source = 'ebay'): Promise<BomHistory> {
+  return get<BomHistory>(`/compare/bom/${encodeURIComponent(bomId)}/history?source=${source}`);
 }

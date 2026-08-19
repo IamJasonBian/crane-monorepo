@@ -18,6 +18,7 @@ from crane_shared.redis_client import RedisClient
 from crane_shared.events import EventBus
 from crane_feed.classifier import classify_listing
 from crane_feed.notifier import notify_listing
+from crane_feed.sources.price_snapshotter import PriceSnapshotter
 
 log = logging.getLogger("crane-feed.ebay")
 
@@ -35,6 +36,7 @@ class CountdownEbayPoller:
         self._bus = event_bus
         self._api_key = os.environ.get("COUNTDOWN_API_KEY", "")
         self.poll_interval = poll_interval
+        self._snapshotter = PriceSnapshotter(redis_client)
 
     def run(self):
         log.info("eBay poller started")
@@ -53,6 +55,12 @@ class CountdownEbayPoller:
                 except Exception as e:
                     log.error(f"Poll error for '{term.query}': {e}")
                 time.sleep(2)  # small delay between API calls
+
+            # Roll the freshly-polled listings into durable daily price points.
+            try:
+                self._snapshotter.snapshot_all(terms, source="ebay")
+            except Exception as e:
+                log.error(f"Snapshot rollup failed: {e}")
 
             time.sleep(self.poll_interval)
 
